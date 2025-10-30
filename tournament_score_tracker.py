@@ -3,95 +3,97 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 
-# --- Constants ---
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs/edit?usp=sharing"
-TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
+# --- CONFIG ---
+MAIN_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs/edit?usp=sharing"
+TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/edit?usp=sharing"
 
-POINTS_MAP = {
-    "A": {"1st": 8, "2nd": 5, "3rd": 2},
-    "B": {"1st": 5, "2nd": 3, "3rd": 1},
-    "AA": {"1st": 15, "2nd": 10, "3rd": 5},
-    "AAA": {"1st": 20, "2nd": 15, "3rd": 10},
-    "C": {}  # handled separately
-}
-
-TOURNEY_TYPE_MAP = {
-    "Class A": "A",
-    "Class B": "B",
-    "Class C": "C",
-    "Class AA": "AA",
-    "Class AAA": "AAA"
-}
-
-EVENTS = ["Traditional Forms","Traditional Weapons","Combat Sparring",
-          "Traditional Sparring","Creative Forms","Creative Weapons",
-          "xTreme Forms","xTreme Weapons"]
-
-# --- Google Sheets Auth ---
-creds_json = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+# --- GOOGLE AUTH ---
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+creds = Credentials.from_service_account_info(st.secrets["google_service_account"], scopes=scope)
 gc = gspread.authorize(creds)
-sheet = gc.open_by_url(SHEET_URL)
 
-# --- App UI ---
-st.title("ATA Tournament Score Tracker")
+# --- LOAD SHEETS ---
+main_sheet = gc.open_by_url(MAIN_SHEET_URL)
+tournament_df = pd.read_csv(TOURNAMENT_LIST_SHEET.replace("/edit?usp=sharing", "/export?format=csv"))
 
-# User name input
-user_name = st.text_input("Enter Competitor Name (First Last):").strip()
-if not user_name:
-    st.warning("Please enter your name to continue.")
-    st.stop()
+# --- APP UI ---
+st.title("🏆 ATA Tournament Score Tracker")
 
-# Load tournaments
-tournaments_df = pd.read_csv(TOURNAMENT_LIST_SHEET)
-tournament_names = tournaments_df["Tournament Name"].tolist()
-
-tourney_choice = st.selectbox("Select Tournament:", tournament_names)
-
-tourney_info = tournaments_df[tournaments_df["Tournament Name"] == tourney_choice].iloc[0]
-date = tourney_info["Date"]
-tourney_type = tourney_info["Type"]
-
-st.write(f"**Date:** {date}")
-st.write(f"**Tournament Type:** {tourney_type}")
-
-# Normalize type for points
-tourney_type_clean = TOURNEY_TYPE_MAP.get(tourney_type.strip(), None)
-if not tourney_type_clean:
-    st.warning(f"Unrecognized tournament type: {tourney_type}. Using 0 points for all events.")
-
-# Event results input
-event_results = {}
-for event in EVENTS:
-    if tourney_type_clean == "C":
-        pts = st.number_input(f"{event} points (C Tournament)", min_value=0, step=1, key=event)
-        event_results[event] = pts
-    else:
-        place = st.selectbox(f"{event} result:", ["", "1st", "2nd", "3rd"], key=event)
-        event_results[event] = POINTS_MAP.get(tourney_type_clean, {}).get(place, 0)
-
-# Display totals
-st.subheader("Total Points")
-total_points = sum(event_results.values())
-st.write(f"**Total Points:** {total_points}")
-points_df = pd.DataFrame([event_results])
-st.dataframe(points_df.T.rename(columns={0:"Points"}))
-
-# Save to Google Sheet
-if st.button("Save Results"):
+name = st.text_input("Enter your full name (First Last):")
+if name:
+    # Get or create user's sheet
     try:
-        try:
-            comp_sheet = sheet.worksheet(user_name)
-        except gspread.WorksheetNotFound:
-            comp_sheet = sheet.add_worksheet(title=user_name, rows="100", cols="20")
+        worksheet = main_sheet.worksheet(name)
+    except gspread.exceptions.WorksheetNotFound:
+        worksheet = main_sheet.add_worksheet(title=name, rows="100", cols="20")
+        headers = [
+            "Date", "Type", "Tournament Name",
+            "Traditional Forms", "Traditional Weapons",
+            "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons",
+            "xTreme Forms", "xTreme Weapons"
+        ]
+        worksheet.append_row(headers)
 
-        # Check if headers exist
-        headers = comp_sheet.row_values(1)
-        if not headers:
-            comp_sheet.append_row(["Date","Type","Tournament Name"] + EVENTS)
+    selected_tournament = st.selectbox("Select Tournament:", sorted(tournament_df["Tournament Name"].dropna().unique()))
 
-        row_values = [date, tourney_type, tourney_choice] + [event_results[e] for e in EVENTS]
-        comp_sheet.append_row(row_values)
-        st.success("Results saved successfully!")
-    except Exception as e:
-        st.error(f"Failed to save results: {e}")
+    if selected_tournament:
+        row = tournament_df[tournament_df["Tournament Name"] == selected_tournament].iloc[0]
+        date = row["Date"]
+        tourney_type = row["Type"]
+
+        st.write(f"**Tournament Date:** {date}")
+        st.write(f"**Type:** {tourney_type}")
+
+        st.markdown("---")
+
+        st.subheader("Enter Your Results")
+        events = [
+            "Traditional Forms", "Traditional Weapons",
+            "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons",
+            "xTreme Forms", "xTreme Weapons"
+        ]
+
+        results = {}
+        for event in events:
+            if tourney_type == "Class C":
+                # C tournaments: user enters custom points
+                points = st.number_input(f"{event} Points:", min_value=0, max_value=100, step=1)
+                results[event] = points
+            else:
+                results[event] = st.selectbox(
+                    f"{event} Placement:",
+                    ["", "1st", "2nd", "3rd"],
+                    key=event
+                )
+
+        if st.button("💾 Save Results"):
+            # Points system
+            POINTS_MAP = {
+                "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
+                "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
+                "Class AA": {"1st": 15, "2nd": 10, "3rd": 5},
+                "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+            }
+
+            new_row = [date, tourney_type, selected_tournament]
+            for event in events:
+                if tourney_type == "Class C":
+                    new_row.append(results[event])
+                else:
+                    new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
+
+            worksheet.append_row(new_row)
+
+            # --- ADD SUM FORMULAS ---
+            all_values = worksheet.get_all_values()
+            last_row = len(all_values) + 1  # Next available row
+
+            # Add SUM formulas for each event
+            for col_idx, _ in enumerate(events, start=4):  # D -> K
+                formula = f"=SUM({chr(64 + col_idx)}2:{chr(64 + col_idx)}{last_row - 1})"
+                worksheet.update_cell(last_row, col_idx, formula)
+
+            st.success("✅ Tournament results saved successfully!")
+
