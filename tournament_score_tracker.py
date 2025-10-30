@@ -6,79 +6,100 @@ import gspread
 from datetime import datetime
 
 # Load credentials from secrets
-creds_dict = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(creds_dict)
+#creds_dict = st.secrets["google_service_account"]
+#creds = Credentials.from_service_account_info(creds_dict)
 
 # Connect to Google Sheets
+#gc = gspread.authorize(creds)
+
+st.set_page_config(page_title="Tournament Score Tracker", layout="wide")
+
+# --- Load Google Sheets credentials from Streamlit secrets ---
+creds_json = st.secrets["google_service_account"]
+creds = Credentials.from_service_account_info(creds_json, scopes=[
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+])
 gc = gspread.authorize(creds)
 
-# --- Constants ---
-TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/edit?usp=sharing"
-RESULTS_SHEET = "https://docs.google.com/spreadsheets/d/1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs/edit?usp=sharing"
+# --- Google Sheets IDs ---
+TOURNAMENT_LIST_SHEET_ID = "16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE"
+SCORES_SHEET_ID = "1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs"
 
-EVENTS = [
+# --- Load Tournament List ---
+tournament_ws = gc.open_by_key(TOURNAMENT_LIST_SHEET_ID).sheet1
+tournament_data = tournament_ws.get_all_records()
+tournaments_df = pd.DataFrame(tournament_data)
+
+# --- Input: User Name ---
+st.title("Tournament Score Tracker")
+user_name = st.text_input("Enter your First and Last Name:")
+
+if not user_name.strip():
+    st.warning("Please enter your name to continue.")
+    st.stop()
+
+# --- Input: Tournament ---
+tournament_names = tournaments_df["Tournament Name"].unique()
+selected_tournament = st.selectbox("Select Tournament:", tournament_names)
+
+# Get tournament details
+tourney_row = tournaments_df[tournaments_df["Tournament Name"] == selected_tournament].iloc[0]
+tourney_date = tourney_row["Date"]
+tourney_type = tourney_row["Type"]
+
+st.write(f"**Date:** {tourney_date}  |  **Type:** {tourney_type}")
+
+# --- Input: Event Results ---
+events = [
     "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
     "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
 ]
 
-POINTS_MAPPING = {
-    "A": {"1st":8, "2nd":5, "3rd":2},
-    "B": {"1st":5, "2nd":3, "3rd":1},
-    "AA":{"1st":15,"2nd":10,"3rd":5},
-    "AAA":{"1st":20,"2nd":15,"3rd":10},
-    "C": None  # For C tournaments, user enters points manually
+# Points mapping by tournament type
+POINTS_MAP = {
+    "A": {"1st": 8, "2nd": 5, "3rd": 2},
+    "B": {"1st": 5, "2nd": 3, "3rd": 1},
+    "AA": {"1st": 15, "2nd": 10, "3rd": 5},
+    "AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+    "C": None  # For C tournaments, user enters points directly
 }
 
-# --- Load tournament list ---
-tournaments_df = pd.read_csv(TOURNAMENT_LIST_SHEET)
-tournaments_df['Tournament Name'] = tournaments_df['Tournament Name'].astype(str)
-
-st.title("Tournament Score Tracker")
-
-# --- User input ---
-user_name = st.text_input("Enter your full name (First Last):").strip()
-if not user_name:
-    st.warning("Please enter your name to continue.")
-    st.stop()
-
-# Load or create user's tab
-results_gsheet = gc.open_by_url(RESULTS_SHEET)
-try:
-    worksheet = results_gsheet.worksheet(user_name)
-except gspread.WorksheetNotFound:
-    worksheet = results_gsheet.add_worksheet(title=user_name, rows=100, cols=20)
-    worksheet.append_row(["Date","Type","Tournament Name"] + EVENTS)
-
-# Tournament selection
-tournament_choice = st.selectbox("Select Tournament:", sorted(tournaments_df['Tournament Name'].unique()))
-tournament_info = tournaments_df[tournaments_df['Tournament Name'] == tournament_choice].iloc[0]
-tournament_date = tournament_info['Date']
-tournament_type = tournament_info['Type']
-
-st.markdown(f"**Date:** {tournament_date}  |  **Type:** {tournament_type}")
-
-# --- Enter event results ---
-st.subheader("Enter Results for Each Event")
-results_input = {}
-for event in EVENTS:
-    if tournament_type == "C":
-        results_input[event] = st.number_input(f"{event} points", min_value=0, step=1)
+event_results = {}
+for event in events:
+    if tourney_type == "C":
+        pts = st.number_input(f"{event} points (C Tournament)", min_value=0, step=1)
+        event_results[event] = pts
     else:
-        results_input[event] = st.selectbox(f"{event} placement", ["", "1st","2nd","3rd"], index=0)
+        place = st.selectbox(f"{event} result:", ["", "1st", "2nd", "3rd"], key=event)
+        event_results[event] = POINTS_MAP[tourney_type].get(place, 0)
 
-# --- Calculate total points ---
-total_points = {}
-for event, val in results_input.items():
-    if tournament_type == "C":
-        total_points[event] = val
-    else:
-        total_points[event] = POINTS_MAPPING[tournament_type].get(val, 0)
-
-st.markdown("### Total Points per Event")
-st.dataframe(pd.DataFrame([total_points]))
+# --- Calculate Total Points ---
+total_points = sum(event_results.values())
+st.write(f"**Total Points:** {total_points}")
 
 # --- Save to Google Sheet ---
 if st.button("Save Results"):
-    row = [tournament_date, tournament_type, tournament_choice] + [results_input[e] for e in EVENTS]
-    worksheet.append_row(row)
-    st.success("Results saved successfully!")
+    # Open or create user tab
+    try:
+        score_ws = gc.open_by_key(SCORES_SHEET_ID).worksheet(user_name)
+    except gspread.WorksheetNotFound:
+        score_ws = gc.open_by_key(SCORES_SHEET_ID).add_worksheet(title=user_name, rows=100, cols=20)
+        # Add headers
+        score_ws.append_row(["Date", "Type", "Tournament Name"] + events)
+
+    # Append new row
+    new_row = [tourney_date, tourney_type, selected_tournament] + [event_results[e] for e in events]
+    score_ws.append_row(new_row)
+    st.success("✅ Results saved successfully!")
+
+# --- Display User Sheet ---
+st.subheader(f"{user_name}'s Tournament Scores")
+score_ws = gc.open_by_key(SCORES_SHEET_ID).worksheet(user_name)
+data = score_ws.get_all_records()
+if data:
+    df = pd.DataFrame(data)
+    df["Total Points"] = df[events].sum(axis=1)
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("No scores yet.")
