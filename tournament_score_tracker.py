@@ -5,9 +5,11 @@ from google.oauth2.service_account import Credentials
 import gspread
 from datetime import datetime
 
-# --- Load Google Sheets credentials ---
-creds_dict = json.loads(st.secrets["google_service_account"])
+# Load credentials from secrets
+creds_dict = st.secrets["google_service_account"]
 creds = Credentials.from_service_account_info(creds_dict)
+
+# Connect to Google Sheets
 gc = gspread.authorize(creds)
 
 # --- Constants ---
