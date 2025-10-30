@@ -1,133 +1,82 @@
 import streamlit as st
 import pandas as pd
-import gspread
+import json
 from google.oauth2.service_account import Credentials
+import gspread
+from datetime import datetime
 
-st.set_page_config(page_title="ATA Tournament Score Tracker", layout="wide")
-
-# -----------------------------
-# GOOGLE AUTHENTICATION
-# -----------------------------
-creds_json = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(creds_json)
+# --- Load Google Sheets credentials ---
+creds_dict = json.loads(st.secrets["google_service_account"])
+creds = Credentials.from_service_account_info(creds_dict)
 gc = gspread.authorize(creds)
 
-# URLs for sheets
-SCORES_SHEET_URL = "https://docs.google.com/spreadsheets/d/1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs/edit?usp=sharing"
-TOURNAMENTS_SHEET_URL = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/edit?usp=sharing"
-
-# Open sheets
-scores_doc = gc.open_by_url(SCORES_SHEET_URL)
-tournament_doc = gc.open_by_url(TOURNAMENTS_SHEET_URL)
-
-# Load tournament names
-try:
-    tournament_df = pd.DataFrame(tournament_doc.sheet1.get_all_records())
-    tournaments = sorted(tournament_df["Tournament Name"].dropna().unique())
-except Exception as e:
-    st.error(f"Failed to load tournament list: {e}")
-    st.stop()
-
-# -----------------------------
-# POINTS CONFIGURATION
-# -----------------------------
-POINTS = {
-    "A": { "1st": 8, "2nd": 5, "3rd": 2 },
-    "B": { "1st": 5, "2nd": 3, "3rd": 1 },
-    "AA": { "1st": 15, "2nd": 10, "3rd": 5 },
-    "AAA": { "1st": 20, "2nd": 15, "3rd": 10 }
-}
+# --- Constants ---
+TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/edit?usp=sharing"
+RESULTS_SHEET = "https://docs.google.com/spreadsheets/d/1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs/edit?usp=sharing"
 
 EVENTS = [
     "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
     "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
 ]
 
-# -----------------------------
-# APP LOGIC
-# -----------------------------
-st.title("🏆 ATA Tournament Score Tracker")
+POINTS_MAPPING = {
+    "A": {"1st":8, "2nd":5, "3rd":2},
+    "B": {"1st":5, "2nd":3, "3rd":1},
+    "AA":{"1st":15,"2nd":10,"3rd":5},
+    "AAA":{"1st":20,"2nd":15,"3rd":10},
+    "C": None  # For C tournaments, user enters points manually
+}
 
-# User entry
-first_name = st.text_input("First Name")
-last_name = st.text_input("Last Name")
+# --- Load tournament list ---
+tournaments_df = pd.read_csv(TOURNAMENT_LIST_SHEET)
+tournaments_df['Tournament Name'] = tournaments_df['Tournament Name'].astype(str)
 
-if not first_name or not last_name:
-    st.info("Please enter both your **First** and **Last Name** to begin.")
+st.title("Tournament Score Tracker")
+
+# --- User input ---
+user_name = st.text_input("Enter your full name (First Last):").strip()
+if not user_name:
+    st.warning("Please enter your name to continue.")
     st.stop()
 
-tab_name = f"{first_name.strip().title()} {last_name.strip().title()}"
-
-# Create or open user’s sheet tab
+# Load or create user's tab
+results_gsheet = gc.open_by_url(RESULTS_SHEET)
 try:
-    try:
-        user_sheet = scores_doc.worksheet(tab_name)
-    except gspread.exceptions.WorksheetNotFound:
-        user_sheet = scores_doc.add_worksheet(title=tab_name, rows=200, cols=20)
-        # Add headers
-        headers = ["Date", "Type", "Tournament Name"] + EVENTS
-        user_sheet.append_row(headers)
-except Exception as e:
-    st.error(f"Error accessing your sheet tab: {e}")
-    st.stop()
+    worksheet = results_gsheet.worksheet(user_name)
+except gspread.WorksheetNotFound:
+    worksheet = results_gsheet.add_worksheet(title=user_name, rows=100, cols=20)
+    worksheet.append_row(["Date","Type","Tournament Name"] + EVENTS)
 
 # Tournament selection
-selected_tournament = st.selectbox("Select Tournament", [""] + tournaments)
+tournament_choice = st.selectbox("Select Tournament:", sorted(tournaments_df['Tournament Name'].unique()))
+tournament_info = tournaments_df[tournaments_df['Tournament Name'] == tournament_choice].iloc[0]
+tournament_date = tournament_info['Date']
+tournament_type = tournament_info['Type']
 
-if selected_tournament:
-    t_row = tournament_df[tournament_df["Tournament Name"] == selected_tournament].iloc[0]
-    date = t_row["Date"]
-    t_type = t_row["Type"]
+st.markdown(f"**Date:** {tournament_date}  |  **Type:** {tournament_type}")
 
-    st.markdown(f"**Date:** {date}  \n**Type:** {t_type}")
-
-    st.divider()
-    st.markdown("### 🥋 Enter Your Results")
-
-    entries = {}
-    for event in EVENTS:
-        if t_type.strip().upper() == "C":
-            # Allow numeric entry for C tournaments
-            entries[event] = st.number_input(f"{event} (Enter Points)", min_value=0, step=1, key=event)
-        else:
-            entries[event] = st.selectbox(f"{event}", ["", "1st", "2nd", "3rd"], key=event)
-
-    st.divider()
-
-    # Submit
-    if st.button("Submit Results"):
-        try:
-            new_row = [date, t_type, selected_tournament]
-            for event in EVENTS:
-                val = entries[event]
-                if t_type.strip().upper() != "C":
-                    points = POINTS.get(t_type.strip().upper(), {}).get(val, 0)
-                else:
-                    points = val
-                new_row.append(points)
-
-            user_sheet.append_row(new_row)
-            st.success(f"✅ Results saved for {selected_tournament}!")
-        except Exception as e:
-            st.error(f"Error saving results: {e}")
-
-# -----------------------------
-# DISPLAY EXISTING DATA
-# -----------------------------
-st.divider()
-st.subheader("📊 Your Tournament Summary")
-
-try:
-    data = pd.DataFrame(user_sheet.get_all_records())
-    if not data.empty:
-        # Compute totals
-        totals = data[EVENTS].sum().to_dict()
-        totals_df = pd.DataFrame([totals])
-
-        st.dataframe(data, use_container_width=True, hide_index=True)
-        st.markdown("### 🧮 Total Points by Event")
-        st.dataframe(totals_df, use_container_width=True, hide_index=True)
+# --- Enter event results ---
+st.subheader("Enter Results for Each Event")
+results_input = {}
+for event in EVENTS:
+    if tournament_type == "C":
+        results_input[event] = st.number_input(f"{event} points", min_value=0, step=1)
     else:
-        st.info("No scores recorded yet.")
-except Exception as e:
-    st.error(f"Error loading your scores: {e}")
+        results_input[event] = st.selectbox(f"{event} placement", ["", "1st","2nd","3rd"], index=0)
+
+# --- Calculate total points ---
+total_points = {}
+for event, val in results_input.items():
+    if tournament_type == "C":
+        total_points[event] = val
+    else:
+        total_points[event] = POINTS_MAPPING[tournament_type].get(val, 0)
+
+st.markdown("### Total Points per Event")
+st.dataframe(pd.DataFrame([total_points]))
+
+# --- Save to Google Sheet ---
+if st.button("Save Results"):
+    row = [tournament_date, tournament_type, tournament_choice] + [results_input[e] for e in EVENTS]
+    worksheet.append_row(row)
+    st.success("Results saved successfully!")
