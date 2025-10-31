@@ -114,7 +114,7 @@ results = {}
 POINTS_MAP = {
     "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
     "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
-    "Class AA": {"1st": 15, "2nd": 10, "3rd": 5},
+    "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
     "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
 }
 reverse_points = {v: k for c in POINTS_MAP.values() for k, v in c.items()}
