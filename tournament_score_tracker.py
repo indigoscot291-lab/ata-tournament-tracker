@@ -11,7 +11,9 @@ TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCe
 
 # Load credentials from Streamlit secrets
 creds_json = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets"])
+creds = Credentials.from_service_account_info(
+    creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets"]
+)
 client = gspread.authorize(creds)
 
 # ======================
@@ -37,7 +39,7 @@ user_name = st.text_input("Enter your name (First Last):").strip()
 if not user_name:
     st.stop()
 
-# Make or open user's sheet tab
+# --- Make or open user's sheet tab ---
 try:
     try:
         worksheet = client.open_by_key(SHEET_ID_MAIN).worksheet(user_name)
@@ -68,6 +70,27 @@ st.write(f"**Date:** {date}")
 st.write(f"**Type:** {tourney_type}")
 
 # ======================
+# DUPLICATE CHECK
+# ======================
+existing_records = worksheet.get_all_records()
+existing_df = pd.DataFrame(existing_records)
+
+existing_entry = None
+if not existing_df.empty:
+    mask = (existing_df["Date"] == date) & (existing_df["Tournament Name"] == selected_tournament)
+    if mask.any():
+        existing_entry = existing_df.loc[mask].iloc[0]
+
+edit_mode = False
+if existing_entry is not None:
+    st.warning("⚠️ You have already entered results for this tournament.")
+    col1, col2 = st.columns(2)
+    if col1.button("✏️ Edit existing entry"):
+        edit_mode = True
+    elif col2.button("❌ Cancel"):
+        st.stop()
+
+# ======================
 # EVENT RESULTS INPUT
 # ======================
 events = [
@@ -80,14 +103,24 @@ st.subheader("Enter Your Results")
 results = {}
 if tourney_type == "Class C":
     for event in events:
-        results[event] = st.number_input(f"{event} (Points)", min_value=0, step=1)
+        prefill = int(existing_entry[event]) if edit_mode and pd.notna(existing_entry[event]) else 0
+        results[event] = st.number_input(f"{event} (Points)", min_value=0, step=1, value=prefill)
 else:
     places = ["", "1st", "2nd", "3rd"]
     for event in events:
-        results[event] = st.selectbox(f"{event} (Place)", places, key=event)
+        prefill_val = ""
+        if edit_mode and pd.notna(existing_entry[event]):
+            val = int(existing_entry[event])
+            if val == 8 or val == 15 or val == 20:
+                prefill_val = "1st"
+            elif val == 5 or val == 10 or val == 15:
+                prefill_val = "2nd"
+            elif val == 2 or val == 5 or val == 10:
+                prefill_val = "3rd"
+        results[event] = st.selectbox(f"{event} (Place)", places, index=places.index(prefill_val) if prefill_val in places else 0, key=event)
 
 # ======================
-# SAVE TO SHEET
+# SAVE / EDIT RESULTS
 # ======================
 if st.button("💾 Save Results"):
     POINTS_MAP = {
@@ -104,31 +137,56 @@ if st.button("💾 Save Results"):
         else:
             new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
-    # --- Find totals row (look for "TOTALS" in column A) ---
+    # --- Handle edit mode ---
+    if edit_mode:
+        # Find and replace the existing entry
+        for i, row in enumerate(existing_records):
+            if row["Date"] == date and row["Tournament Name"] == selected_tournament:
+                worksheet.delete_rows(i + 2)  # +2 because of header row
+                break
+        st.info("📝 Updated existing tournament entry.")
+
+    # --- Insert row in date order ---
+    all_data = worksheet.get_all_values()
+    dates = [r[0] for r in all_data[1:] if r and r[0] != "TOTALS"]
+    insert_row_idx = len(all_data) + 1
+
+    try:
+        from datetime import datetime
+        new_date_obj = datetime.strptime(str(date), "%m/%d/%Y")
+        for i, d in enumerate(dates):
+            try:
+                existing_date = datetime.strptime(str(d), "%m/%d/%Y")
+                if new_date_obj < existing_date:
+                    insert_row_idx = i + 2  # +2 for header row
+                    break
+            except:
+                continue
+    except Exception:
+        pass
+
+    # --- Find totals row ---
     col_a = worksheet.col_values(1)
     if "TOTALS" in col_a:
         totals_row_idx = col_a.index("TOTALS") + 1
-        insert_row_idx = totals_row_idx  # insert directly above totals
-    else:
-        insert_row_idx = len(col_a) + 1  # append at bottom if no totals yet
+        if insert_row_idx >= totals_row_idx:
+            insert_row_idx = totals_row_idx
 
-    # --- Insert new result row ---
     worksheet.insert_row(new_row, insert_row_idx)
 
-    # --- If totals row doesn't exist, create it ---
+    # --- Add totals row if missing ---
     if "TOTALS" not in col_a:
         totals_row_idx = insert_row_idx + 1
         worksheet.update_cell(totals_row_idx, 1, "TOTALS")
 
-    # --- Recalculate SUM formulas ---
+    # --- Recalculate totals formulas ---
     all_values = worksheet.get_all_values()
     totals_row_idx = [i + 1 for i, row in enumerate(all_values) if row and row[0] == "TOTALS"][0]
-
-    start_col_idx = 4  # D = first event column
+    start_col_idx = 4
     for offset, _ in enumerate(events):
         col_idx = start_col_idx + offset
         col_letter = chr(64 + col_idx)
         formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
         worksheet.update_cell(totals_row_idx, col_idx, formula)
 
-    st.success("✅ Tournament results saved successfully, totals updated!")
+    st.success("✅ Tournament results saved successfully and totals updated!")
