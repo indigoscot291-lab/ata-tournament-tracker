@@ -57,7 +57,7 @@ except Exception as e:
     st.stop()
 
 # --- Tournament selection ---
-selected_tournament = st.selectbox("Select Tournament:", [""] + tournaments)
+selected_tournament = st.selectbox("Select Tournament:", [""] + tournaments, key="tournament_select")
 if not selected_tournament:
     st.stop()
 
@@ -83,7 +83,7 @@ for i, row in enumerate(rows, start=2):  # Start at row 2 (after header)
         existing_row_index = i
         break
 
-# --- Edit or Cancel UI ---
+# --- Edit / Cancel Logic ---
 if existing_entry and "TOTALS" not in existing_entry["Date"]:
     st.warning("⚠️ You have already entered results for this tournament.")
     col1, col2 = st.columns(2)
@@ -91,10 +91,11 @@ if existing_entry and "TOTALS" not in existing_entry["Date"]:
         st.session_state["edit_mode"] = True
         st.session_state["existing_entry"] = existing_entry
         st.session_state["existing_row_index"] = existing_row_index
-    elif col2.button("❌ Cancel"):
-        # Clear selection and rerun
+    if col2.button("❌ Cancel"):
+        # Fully clear state and rerun cleanly
         for key in list(st.session_state.keys()):
             del st.session_state[key]
+        st.experimental_set_query_params()  # clear UI
         st.rerun()
 
 edit_mode = st.session_state.get("edit_mode", False)
@@ -116,6 +117,7 @@ POINTS_MAP = {
     "Class AA": {"1st": 15, "2nd": 10, "3rd": 5},
     "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
 }
+reverse_points = {v: k for c in POINTS_MAP.values() for k, v in c.items()}
 
 if tourney_type == "Class C":
     for event in events:
@@ -125,7 +127,6 @@ if tourney_type == "Class C":
         results[event] = st.number_input(f"{event} (Points)", min_value=0, step=1, value=default_val)
 else:
     places = ["", "1st", "2nd", "3rd"]
-    reverse_points = {v: k for c in POINTS_MAP.values() for k, v in c.items()}
     for event in events:
         default_place = ""
         if edit_mode and existing_entry:
@@ -155,7 +156,7 @@ if st.button("💾 Save Results"):
         worksheet.delete_rows(st.session_state["existing_row_index"])
         st.info("📝 Existing entry replaced.")
 
-    # --- Insert in date order ---
+    # --- Insert in proper date order ---
     col_a = worksheet.col_values(1)
     if "TOTALS" in col_a:
         totals_row_idx = col_a.index("TOTALS") + 1
@@ -185,7 +186,7 @@ if st.button("💾 Save Results"):
         worksheet.append_row(["TOTALS"] + [""] * (len(events) + 2))
         totals_row_idx = len(worksheet.get_all_values())
 
-    # --- Recalc totals ---
+    # --- Recalculate totals ---
     all_values = worksheet.get_all_values()
     totals_row_idx = [i + 1 for i, r in enumerate(all_values) if r and r[0] == "TOTALS"][0]
     start_col_idx = 4
@@ -195,7 +196,7 @@ if st.button("💾 Save Results"):
         formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
         worksheet.update_cell(totals_row_idx, col_idx, formula)
 
-    # --- Clear edit mode and rerun ---
+    # --- Reset state and rerun ---
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.success(f"✅ Results for '{selected_tournament}' on {date} saved successfully!")
