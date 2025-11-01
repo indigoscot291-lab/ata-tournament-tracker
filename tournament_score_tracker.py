@@ -24,7 +24,6 @@ try:
     tournaments_df = tournaments_df.dropna(subset=["Tournament Name"])
     tournaments_df["Tournament Name"] = tournaments_df["Tournament Name"].astype(str)
     tournaments = tournaments_df["Tournament Name"].unique().tolist()
-    st.success("✅ Tournament list loaded")
 except Exception as e:
     st.error(f"Failed to load tournament list: {e}")
     st.stop()
@@ -45,25 +44,14 @@ user_name = st.text_input("Enter your name (First Last):").strip()
 if not user_name:
     st.stop()
 
-# --- Open or create user sheet ---
-try:
+# --- Helper: Get existing worksheet if it exists ---
+def get_user_worksheet(name):
     try:
-        worksheet = client.open_by_key(SHEET_ID_MAIN).worksheet(user_name)
+        return client.open_by_key(SHEET_ID_MAIN).worksheet(name)
     except gspread.exceptions.WorksheetNotFound:
-        worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
-            title=user_name, rows=200, cols=20
-        )
-        headers = [
-            "Date", "Type", "Tournament Name",
-            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
-            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
-        ]
-        worksheet.append_row(headers)
-        st.info("🆕 New worksheet created for this competitor.")
-except Exception as e:
-    st.error(f"Error accessing user sheet: {e}")
-    st.stop()
+        return None
 
+worksheet = get_user_worksheet(user_name)
 
 # ======================
 # FUNCTION: Update totals row
@@ -89,11 +77,23 @@ def update_totals(ws, events):
         formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
         ws.update_cell(totals_row_idx, col_idx, formula)
 
-
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
 # ======================
 if mode == "Enter Tournament Scores":
+    # Create worksheet if missing
+    if worksheet is None:
+        worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
+            title=user_name, rows=200, cols=20
+        )
+        headers = [
+            "Date", "Type", "Tournament Name",
+            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+        ]
+        worksheet.append_row(headers)
+        st.info("🆕 New worksheet created for this competitor.")
+
     selected_tournament = st.selectbox("Select Tournament:", [""] + tournaments)
     if not selected_tournament:
         st.stop()
@@ -156,33 +156,60 @@ if mode == "Enter Tournament Scores":
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved successfully!")
 
-
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
 elif mode == "View Results":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
+
     data = worksheet.get_all_records()
     if not data:
-        st.info("No results entered yet.")
+        st.info("There are no Tournament Scores for this person.")
     else:
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
-        st.dataframe(df, use_container_width=True)
-
+        st.markdown(
+            """
+            <style>
+            [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
+            [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
+            div[data-testid="stDataFrameContainer"] {overflow: visible !important;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
 elif mode == "Edit Results":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
+
     data = worksheet.get_all_records()
     if not data:
-        st.info("No results to edit yet.")
+        st.info("There are no Tournament Scores for this person.")
         st.stop()
 
     df = pd.DataFrame(data)
     df = df[df["Date"] != "TOTALS"]
 
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
+    st.markdown(
+        """
+        <style>
+        [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
+        [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
+        div[data-testid="stDataFrameContainer"] {overflow: visible !important;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
 
     if st.button("💾 Save Changes"):
         worksheet.clear()
