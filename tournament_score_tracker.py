@@ -33,11 +33,18 @@ except Exception as e:
 # ======================
 st.title("🏆 ATA Tournament Score Tracker")
 
-# --- Main menu ---
-mode = st.selectbox(
-    "Choose an option:",
-    ["", "Enter Tournament Scores", "View Results", "Edit Results"],
-)
+# --- Maintain session state for main menu ---
+if "mode" not in st.session_state:
+    st.session_state.mode = ""
+
+def reset_mode():
+    st.session_state.mode = ""
+
+if st.session_state.mode == "":
+    st.session_state.mode = st.selectbox(
+        "Choose an option:",
+        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
+    )
 
 # --- Get user name ---
 user_name = st.text_input("Enter your name (First Last):").strip()
@@ -80,7 +87,7 @@ def update_totals(ws, events):
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
 # ======================
-if mode == "Enter Tournament Scores":
+if st.session_state.mode == "Enter Tournament Scores":
     # Create worksheet if missing
     if worksheet is None:
         worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
@@ -115,6 +122,9 @@ if mode == "Enter Tournament Scores":
     sheet_df = pd.DataFrame(worksheet.get_all_records())
     if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
         st.warning("⚠️ You have already entered results for this tournament.")
+        if st.button("🔙 Back to Main Menu"):
+            reset_mode()
+            st.experimental_rerun()
         st.stop()
 
     st.subheader("Enter Your Results")
@@ -156,12 +166,19 @@ if mode == "Enter Tournament Scores":
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved successfully!")
 
+    if st.button("🔙 Back to Main Menu"):
+        reset_mode()
+        st.experimental_rerun()
+
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
-elif mode == "View Results":
+elif st.session_state.mode == "View Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
+        if st.button("🔙 Back to Main Menu"):
+            reset_mode()
+            st.experimental_rerun()
         st.stop()
 
     data = worksheet.get_all_records()
@@ -170,29 +187,48 @@ elif mode == "View Results":
     else:
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
+
+        # Remove scrollbars completely
         st.markdown(
             """
             <style>
+            [data-testid="stDataFrameResizable"] div {
+                overflow: visible !important;
+            }
             [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
             [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-            div[data-testid="stDataFrameContainer"] {overflow: visible !important;}
+            div[data-testid="stDataFrameContainer"] {
+                overflow: visible !important;
+                width: 100% !important;
+            }
             </style>
             """,
             unsafe_allow_html=True,
         )
+
         st.dataframe(df, use_container_width=True, hide_index=True)
+
+    if st.button("🔙 Back to Main Menu"):
+        reset_mode()
+        st.experimental_rerun()
 
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
-elif mode == "Edit Results":
+elif st.session_state.mode == "Edit Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
+        if st.button("🔙 Back to Main Menu"):
+            reset_mode()
+            st.experimental_rerun()
         st.stop()
 
     data = worksheet.get_all_records()
     if not data:
         st.info("There are no Tournament Scores for this person.")
+        if st.button("🔙 Back to Main Menu"):
+            reset_mode()
+            st.experimental_rerun()
         st.stop()
 
     df = pd.DataFrame(data)
@@ -201,9 +237,15 @@ elif mode == "Edit Results":
     st.markdown(
         """
         <style>
+        [data-testid="stDataFrameResizable"] div {
+            overflow: visible !important;
+        }
         [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
         [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-        div[data-testid="stDataFrameContainer"] {overflow: visible !important;}
+        div[data-testid="stDataFrameContainer"] {
+            overflow: visible !important;
+            width: 100% !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -222,3 +264,7 @@ elif mode == "Edit Results":
         ])
 
         st.success("✅ Changes saved successfully and totals updated!")
+
+    if st.button("🔙 Back to Main Menu"):
+        reset_mode()
+        st.experimental_rerun()
