@@ -257,4 +257,3 @@ if st.button("💾 Save Edits"):
     worksheet.insert_row(new_row, insert_idx)
     update_totals(worksheet, events)
     st.success("✅ Tournament results updated successfully, totals recalculated!")
-```
