@@ -37,13 +37,16 @@ st.title("🏆 ATA Tournament Score Tracker")
 if "mode" not in st.session_state:
     st.session_state.mode = ""
 
-def reset_mode():
-    st.session_state.mode = ""
-
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
         ["", "Enter Tournament Scores", "View Results", "Edit Results"],
+    )
+else:
+    st.session_state.mode = st.selectbox(
+        "Choose an option:",
+        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
+        index=["", "Enter Tournament Scores", "View Results", "Edit Results"].index(st.session_state.mode),
     )
 
 # --- Get user name ---
@@ -122,9 +125,6 @@ if st.session_state.mode == "Enter Tournament Scores":
     sheet_df = pd.DataFrame(worksheet.get_all_records())
     if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
         st.warning("⚠️ You have already entered results for this tournament.")
-        if st.button("🔙 Back to Main Menu"):
-            reset_mode()
-            st.experimental_rerun()
         st.stop()
 
     st.subheader("Enter Your Results")
@@ -166,19 +166,12 @@ if st.session_state.mode == "Enter Tournament Scores":
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved successfully!")
 
-    if st.button("🔙 Back to Main Menu"):
-        reset_mode()
-        st.experimental_rerun()
-
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
 elif st.session_state.mode == "View Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
-        if st.button("🔙 Back to Main Menu"):
-            reset_mode()
-            st.experimental_rerun()
         st.stop()
 
     data = worksheet.get_all_records()
@@ -188,7 +181,6 @@ elif st.session_state.mode == "View Results":
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
 
-        # Remove scrollbars completely
         st.markdown(
             """
             <style>
@@ -208,27 +200,17 @@ elif st.session_state.mode == "View Results":
 
         st.dataframe(df, use_container_width=True, hide_index=True)
 
-    if st.button("🔙 Back to Main Menu"):
-        reset_mode()
-        st.experimental_rerun()
-
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
 elif st.session_state.mode == "Edit Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
-        if st.button("🔙 Back to Main Menu"):
-            reset_mode()
-            st.experimental_rerun()
         st.stop()
 
     data = worksheet.get_all_records()
     if not data:
         st.info("There are no Tournament Scores for this person.")
-        if st.button("🔙 Back to Main Menu"):
-            reset_mode()
-            st.experimental_rerun()
         st.stop()
 
     df = pd.DataFrame(data)
@@ -264,7 +246,3 @@ elif st.session_state.mode == "Edit Results":
         ])
 
         st.success("✅ Changes saved successfully and totals updated!")
-
-    if st.button("🔙 Back to Main Menu"):
-        reset_mode()
-        st.experimental_rerun()
