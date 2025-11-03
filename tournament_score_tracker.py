@@ -15,7 +15,10 @@ TOURNAMENT_LIST_SHEET = "[https://docs.google.com/spreadsheets/d/16ORyU9066rDdQC
 # Load credentials from Streamlit secrets
 
 creds_json = st.secrets["google_service_account"]
-creds = Credentials.from_service_account_info(creds_json, scopes=["[https://www.googleapis.com/auth/spreadsheets](https://www.googleapis.com/auth/spreadsheets)"])
+creds = Credentials.from_service_account_info(
+creds_json,
+scopes=["[https://www.googleapis.com/auth/spreadsheets](https://www.googleapis.com/auth/spreadsheets)"]
+)
 client = gspread.authorize(creds)
 
 # ======================
@@ -193,7 +196,7 @@ if user_data is None:
 st.info("There are no Tournament Scores for this person.")
 st.stop()
 st.subheader(f"{user_name}'s Tournament Results")
-st.dataframe(user_data.drop(columns=[user_data.columns[0]] if "TOTALS" in user_data.iloc[-1,0] else None), use_container_width=True)
+st.dataframe(user_data, use_container_width=True, hide_index=True)
 
 # ======================
 
@@ -208,9 +211,8 @@ st.info("There are no Tournament Scores for this person.")
 st.stop()
 
 ```
-# Clean table view
 st.subheader(f"{user_name}'s Tournament Results")
-st.dataframe(user_data, use_container_width=True)
+st.dataframe(user_data, use_container_width=True, hide_index=True)
 
 # Select tournament to edit
 tourneys_entered = user_data["Tournament Name"].tolist()
@@ -219,17 +221,22 @@ if not selected_edit:
     st.stop()
 
 row_to_edit = user_data[user_data["Tournament Name"] == selected_edit].index[0] + 2
-old_row = user_data.iloc[row_to_edit-2]
+old_row = user_data.iloc[row_to_edit - 2]
 
 st.subheader("Edit Results")
 updated_results = {}
 for event in events:
-    if user_data.iloc[row_to_edit-2]["Type"] == "Class C":
+    if old_row["Type"] == "Class C":
         updated_results[event] = st.number_input(f"{event} (Points)", min_value=0, value=int(old_row[event]), step=1)
     else:
         places = ["", "1st", "2nd", "3rd"]
-        current_place = [k for k,v in POINTS_MAP.get(old_row["Type"], {}).items() if v==int(old_row[event])]
-        updated_results[event] = st.selectbox(f"{event} (Place)", places, index=places.index(current_place[0]) if current_place else 0, key=f"edit_{event}")
+        current_place = [k for k, v in POINTS_MAP.get(old_row["Type"], {}).items() if v == int(old_row[event])]
+        updated_results[event] = st.selectbox(
+            f"{event} (Place)",
+            places,
+            index=places.index(current_place[0]) if current_place else 0,
+            key=f"edit_{event}"
+        )
 
 if st.button("💾 Save Edits"):
     new_row = [old_row["Date"], old_row["Type"], old_row["Tournament Name"]]
@@ -239,7 +246,6 @@ if st.button("💾 Save Edits"):
         else:
             new_row.append(POINTS_MAP.get(old_row["Type"], {}).get(updated_results[event], 0))
     worksheet.delete_row(row_to_edit)
-    # Insert in date order
     all_rows = worksheet.get_all_values()
     insert_idx = 2
     for i, row in enumerate(all_rows[1:], start=2):
@@ -250,5 +256,5 @@ if st.button("💾 Save Edits"):
         insert_idx = len(all_rows) + 1
     worksheet.insert_row(new_row, insert_idx)
     update_totals(worksheet, events)
-    st.success("✅ Tournament results updated successfully, totals recalculated!")  
+    st.success("✅ Tournament results updated successfully, totals recalculated!")
 ```
