@@ -45,8 +45,8 @@ if st.session_state.mode == "":
 else:
     st.session_state.mode = st.selectbox(
         "Choose an option:",
-        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
-        index=["", "Enter Tournament Scores", "View Results", "Edit Results"].index(st.session_state.mode),
+        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"],
+        index=["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"].index(st.session_state.mode),
     )
 
 # --- Get user name ---
@@ -169,7 +169,7 @@ if st.session_state.mode == "Enter Tournament Scores":
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
-elif st.session_state.mode == "View Results":
+elif st.session_state.mode == "View Tournament Scores":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
@@ -203,7 +203,7 @@ elif st.session_state.mode == "View Results":
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
-elif st.session_state.mode == "Edit Results":
+elif st.session_state.mode == "Edit Tournament Scores":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
