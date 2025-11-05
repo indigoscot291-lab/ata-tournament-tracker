@@ -4,211 +4,202 @@ import gspread
 from google.oauth2.service_account import Credentials
 from datetime import datetime
 
-# --- CONFIG ---
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
-SPREADSHEET_ID = st.secrets["SPREADSHEET_ID"]
-TOURNAMENT_LIST_SHEET = st.secrets["TOURNAMENT_LIST_SHEET"]
+# ======================
+# GOOGLE SHEETS SETUP
+# ======================
+SHEET_ID_MAIN = "1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs"
+TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
 
-# Authenticate Google Sheets
+# Load credentials
+creds_json = st.secrets["google_service_account"]
 creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"], scopes=SCOPES
+    creds_json, scopes=["https://www.googleapis.com/auth/spreadsheets"]
 )
-gc = gspread.authorize(creds)
+client = gspread.authorize(creds)
 
-# --- LOAD TOURNAMENTS ---
+# ======================
+# LOAD TOURNAMENT LIST
+# ======================
 try:
     tournaments_df = pd.read_csv(TOURNAMENT_LIST_SHEET)
-except Exception:
-    tournaments_df = pd.DataFrame(
-        columns=["Date", "Type", "Tournament Name"]
+    tournaments_df = tournaments_df.dropna(subset=["Tournament Name"])
+    tournaments_df["Tournament Name"] = tournaments_df["Tournament Name"].astype(str)
+    tournaments = tournaments_df["Tournament Name"].unique().tolist()
+except Exception as e:
+    st.error(f"Failed to load tournament list: {e}")
+    st.stop()
+
+# ======================
+# STREAMLIT UI
+# ======================
+st.title("🏆 ATA Tournament Score Tracker")
+
+if "mode" not in st.session_state:
+    st.session_state.mode = ""
+
+def reset_mode():
+    st.session_state.mode = ""
+
+if st.session_state.mode == "":
+    st.session_state.mode = st.selectbox(
+        "Choose an option:",
+        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
     )
 
-# --- EVENT COLUMNS ---
-EVENTS = [
-    "Traditional Forms", "Traditional Weapons",
-    "Combat Sparring", "Traditional Sparring",
-    "Creative Forms", "Creative Weapons",
-    "xTreme Forms", "xTreme Weapons"
-]
+user_name = st.text_input("Enter your name (First Last):").strip()
+if not user_name:
+    st.stop()
 
+def get_user_worksheet(name):
+    try:
+        return client.open_by_key(SHEET_ID_MAIN).worksheet(name)
+    except gspread.exceptions.WorksheetNotFound:
+        return None
 
-# ------------------ FUNCTION: UPDATE TOTALS ------------------
+worksheet = get_user_worksheet(user_name)
+
+# ======================
+# FUNCTION: UPDATE TOTALS
+# ======================
 def update_totals(ws, events):
-    all_data = ws.get_all_records()
-    if not all_data:
+    data = ws.get_all_records()
+    if not data:
         return
 
-    df = pd.DataFrame(all_data)
-
-    # Remove totals rows (old totals)
+    df = pd.DataFrame(data)
     df = df[df["Date"] != "TOTALS"]
 
-    # Convert to datetime safely
+    # Convert dates safely
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.sort_values("Date", ascending=True).reset_index(drop=True)
 
-    # Handle weird manual entries — fill invalids with 1900-01-01 for sorting
-    df["Date"] = df["Date"].fillna(pd.Timestamp("1900-01-01"))
-
-    df = df.sort_values("Date").reset_index(drop=True)
-
-    # Ensure Counted ✅ column exists
-    if "Counted ✅" not in df.columns:
-        df["Counted ✅"] = ""
-
-    # Remove existing TOTALS row if still in sheet
-    all_values = ws.get_all_values()
-    col_a = [row[0] for row in all_values if row]
-    if "TOTALS" in col_a:
-        totals_row_idx = col_a.index("TOTALS") + 1
-        ws.delete_rows(totals_row_idx)
-
-    # Determine which rows count based on type limits
-    counted_flags = []
+    # Determine which scores count
     type_limits = {"Class AAA": 1, "Class AA": 2, "Class A": 5, "Class B": 5, "Class C": 3}
-    used = {t: 0 for t in type_limits.keys()}
+    df["Counted ✅"] = ""
 
-    for _, row in df.iterrows():
-        t_type = row["Type"]
-        if used.get(t_type, 0) < type_limits.get(t_type, 0):
-            counted_flags.append(True)
+    used = {k: 0 for k in type_limits}
+    for i, row in df.iterrows():
+        t_type = row.get("Type", "")
+        if t_type in type_limits and used[t_type] < type_limits[t_type]:
+            df.at[i, "Counted ✅"] = "✅"
             used[t_type] += 1
-        else:
-            counted_flags.append(False)
 
-    df["Counted ✅"] = ["✅" if c else "" for c in counted_flags]
+    # Remove existing TOTALS line from sheet if present
+    all_values = ws.get_all_values()
+    col_a = [r[0] for r in all_values if r]
+    if "TOTALS" in col_a:
+        idx = col_a.index("TOTALS") + 1
+        ws.delete_rows(idx)
 
-    # Build totals row
+    # Create totals row based only on ✅ rows
     totals = ["TOTALS", "", ""]
-    for event in events:
-        totals.append(df.loc[df["Counted ✅"] == "✅", event].sum())
-    totals.append("")  # final Counted ✅ col
+    for e in events:
+        totals.append(df.loc[df["Counted ✅"] == "✅", e].sum())
+    totals.append("")
 
-    # Convert everything to strings for JSON safety
+    # Convert to string to avoid JSON errors
     df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-    df = df.fillna("")
-    df = df.astype(str)
+    df = df.fillna("").astype(str)
 
-    # Write all back to Google Sheet
+    # Rewrite sheet cleanly
     ws.clear()
     ws.append_row(df.columns.tolist())
     ws.append_rows(df.values.tolist())
-    ws.append_row([str(x) for x in totals])
+    ws.append_row(totals)
 
 
-# ------------------ FUNCTION: ENTER SCORES ------------------
-def enter_scores():
-    st.header("Enter Tournament Scores")
+# ======================
+# ENTER TOURNAMENT SCORES
+# ======================
+if st.session_state.mode == "Enter Tournament Scores":
+    if worksheet is None:
+        worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
+            title=user_name, rows=200, cols=20
+        )
+        headers = [
+            "Date", "Type", "Tournament Name",
+            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons",
+            "Counted ✅"
+        ]
+        worksheet.append_row(headers)
+        st.info("🆕 New worksheet created for this competitor.")
 
-    name = st.text_input("Competitor Name").strip()
-    if not name:
-        st.info("Enter your name to continue.")
-        return
+    selected_tournament = st.selectbox("Select Tournament:", [""] + tournaments)
+    if not selected_tournament:
+        st.stop()
 
-    # Check or create worksheet
-    try:
-        worksheet = gc.open_by_key(SPREADSHEET_ID).worksheet(name)
-    except gspread.exceptions.WorksheetNotFound:
-        if st.session_state.get("selected_option") == "Enter Tournament Scores":
-            worksheet = gc.open_by_key(SPREADSHEET_ID).add_worksheet(title=name, rows="100", cols="20")
-            worksheet.append_row(["Date", "Type", "Tournament Name"] + EVENTS + ["Counted ✅"])
-        else:
-            st.warning("There are no Tournament Scores for this person.")
-            return
+    tourney_row = tournaments_df[tournaments_df["Tournament Name"] == selected_tournament].iloc[0]
+    date = tourney_row["Date"]
+    tourney_type = tourney_row["Type"]
 
-    # Tournament selection
-    t_choice = st.selectbox("Select Tournament:", [""] + tournaments_df["Tournament Name"].tolist())
+    st.write(f"**Date:** {date}")
+    st.write(f"**Type:** {tourney_type}")
 
-    if t_choice:
-        selected_row = tournaments_df[tournaments_df["Tournament Name"] == t_choice].iloc[0]
-        t_date = selected_row["Date"]
-        t_type = selected_row["Type"]
+    events = [
+        "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+        "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+    ]
 
-        existing = worksheet.get_all_records()
-        if any((row["Date"] == t_date and row["Tournament Name"] == t_choice) for row in existing):
-            st.warning("You have already entered results for this tournament.")
-            return
+    sheet_df = pd.DataFrame(worksheet.get_all_records())
+    if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
+        st.warning("⚠️ You have already entered results for this tournament.")
+        st.stop()
 
-        st.write(f"**Date:** {t_date} | **Type:** {t_type}")
-        scores = {}
-        for event in EVENTS:
-            scores[event] = st.number_input(f"{event}", min_value=0, max_value=10, step=1)
+    st.subheader("Enter Your Results")
 
-        if st.button("Submit Results"):
-            new_row = [t_date, t_type, t_choice] + [scores[e] for e in EVENTS] + [""]
-            worksheet.append_row(new_row)
-            update_totals(worksheet, EVENTS)
-            st.success("Tournament results added successfully!")
+    results = {}
+    for e in events:
+        results[e] = st.number_input(f"{e} (Points)", min_value=0, step=1)
+
+    if st.button("💾 Save Results"):
+        new_row = [date, tourney_type, selected_tournament] + [results[e] for e in events] + [""]
+        worksheet.append_row(new_row)
+        update_totals(worksheet, events)
+        st.success("✅ Tournament results saved and totals updated!")
 
 
-# ------------------ FUNCTION: VIEW RESULTS ------------------
-def view_results():
-    st.header("View Tournament Results")
+# ======================
+# VIEW RESULTS
+# ======================
+elif st.session_state.mode == "View Results":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
 
-    name = st.text_input("Competitor Name").strip()
-    if not name:
-        st.info("Enter a name to view results.")
-        return
+    data = worksheet.get_all_values()
+    if not data or len(data) < 2:
+        st.info("No results found.")
+        st.stop()
 
-    try:
-        worksheet = gc.open_by_key(SPREADSHEET_ID).worksheet(name)
-    except gspread.exceptions.WorksheetNotFound:
-        st.warning("There are no Tournament Scores for this person.")
-        return
+    df = pd.DataFrame(data[1:], columns=data[0])
+    st.dataframe(df, use_container_width=True, hide_index=True)
+
+
+# ======================
+# EDIT RESULTS
+# ======================
+elif st.session_state.mode == "Edit Results":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
 
     data = worksheet.get_all_values()
     if not data or len(data) < 2:
         st.info("No tournament results available.")
-        return
-
-    df = pd.DataFrame(data[1:], columns=data[0])
-    st.dataframe(
-        df.style.hide(axis="index"),
-        use_container_width=True,
-        height=len(df) * 35 + 50
-    )
-
-
-# ------------------ FUNCTION: EDIT RESULTS ------------------
-def edit_results():
-    st.header("Edit Tournament Results")
-
-    name = st.text_input("Competitor Name").strip()
-    if not name:
-        st.info("Enter a name to view results.")
-        return
-
-    try:
-        worksheet = gc.open_by_key(SPREADSHEET_ID).worksheet(name)
-    except gspread.exceptions.WorksheetNotFound:
-        st.warning("There are no Tournament Scores for this person.")
-        return
-
-    data = worksheet.get_all_values()
-    if not data or len(data) < 2:
-        st.info("No data to edit.")
-        return
+        st.stop()
 
     df = pd.DataFrame(data[1:], columns=data[0])
     df = df[df["Date"] != "TOTALS"]
 
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True)
-    if st.button("Save Changes"):
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
+
+    if st.button("💾 Save Changes"):
         worksheet.clear()
         worksheet.append_row(df.columns.tolist())
         worksheet.append_rows(edited_df.values.tolist())
-        update_totals(worksheet, EVENTS)
-        st.success("Changes saved and totals recalculated.")
-
-
-# ------------------ MAIN APP ------------------
-st.title("ATA Tournament Score Tracker")
-
-options = ["Enter Tournament Scores", "View Results", "Edit Results"]
-choice = st.selectbox("Choose an option:", options, key="selected_option")
-
-if choice == "Enter Tournament Scores":
-    enter_scores()
-elif choice == "View Results":
-    view_results()
-elif choice == "Edit Results":
-    edit_results()
+        update_totals(worksheet, [
+            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+        ])
+        st.success("✅ Changes saved successfully and totals updated!")
