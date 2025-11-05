@@ -249,8 +249,7 @@ def style_counted(x):
         color_df[col] = ["background-color: #b6fcb6" if val else "" for val in counted[col]]
     return color_df
 
-styled_df = pd.concat([df, totals_row], ignore_index=True).style.apply(lambda x: style_counted(x), axis=None)
-st.write(styled_df.to_html(), unsafe_allow_html=True)
+st.dataframe(pd.concat([df, totals_row], ignore_index=True).style.apply(style_counted, axis=None), use_container_width=True, hide_index=True)
 ```
 
 # ======================
