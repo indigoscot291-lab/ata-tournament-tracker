@@ -64,13 +64,19 @@ worksheet = get_user_worksheet(user_name)
 # FUNCTION: Update totals row with ATA limits
 # ======================
 def update_totals(ws, events):
+    """Recalculate totals using ATA rules, remove old TOTALS, and sort by Date."""
     all_values = ws.get_all_records()
     df = pd.DataFrame(all_values)
     if df.empty:
         return
 
-    # Remove old totals row if it exists
-    df = df[df["Date"] != "TOTALS"]
+    # Remove any existing TOTALS rows
+    df = df[df["Date"].astype(str).str.upper() != "TOTALS"]
+
+    # Sort by Date (convert safely)
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.sort_values("Date", ascending=True)
+    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
 
     # Convert numeric columns to numbers safely
     for col in events:
@@ -94,12 +100,11 @@ def update_totals(ws, events):
     # Compute event totals from selected rows
     totals = {col: selected_rows[col].sum() for col in events}
 
-    # Rewrite sheet (keep all rows intact)
+    # Rewrite sheet — no old TOTALS line, always sorted
     ws.clear()
     ws.append_row(df.columns.drop("TotalPoints").tolist())
     ws.append_rows(df.drop(columns=["TotalPoints"]).astype(str).values.tolist())
 
-    # Append totals row at end
     totals_row = ["TOTALS", "", "Counted Results"] + [str(round(totals.get(col, 0), 2)) for col in events]
     ws.append_row(totals_row)
 
@@ -171,16 +176,6 @@ if st.session_state.mode == "Enter Tournament Scores":
                 new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
         worksheet.append_row(new_row)
-
-        # Resort by date
-        df = pd.DataFrame(worksheet.get_all_records())
-        if "Date" in df.columns:
-            df = df[df["Date"] != "TOTALS"]
-            df = df.sort_values("Date").reset_index(drop=True)
-            worksheet.clear()
-            worksheet.append_row(df.columns.tolist())
-            worksheet.append_rows(df.values.tolist())
-
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved successfully!")
 
