@@ -12,7 +12,7 @@ from google.oauth2.service_account import Credentials
 SHEET_ID_MAIN = "1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs"
 TOURNAMENT_LIST_SHEET = "[https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv](https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv)"
 
-# Load credentials from Streamlit secrets
+# Load credentials
 
 creds_json = st.secrets["google_service_account"]
 creds = Credentials.from_service_account_info(
@@ -47,8 +47,7 @@ st.title("🏆 ATA Tournament Score Tracker")
 
 mode = st.selectbox(
 "Choose an option:",
-["", "Enter Tournament Scores", "View Tournament Results", "Edit Tournament Results"],
-index=0
+["", "Enter Tournament Scores", "View Tournament Results", "Edit Tournament Results"]
 )
 st.session_state.mode = mode
 
