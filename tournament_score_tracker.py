@@ -33,11 +33,7 @@ except Exception as e:
 # ======================
 st.title("🏆 ATA Tournament Score Tracker")
 
-# --- Maintain session state for main menu ---
 if "mode" not in st.session_state:
-    st.session_state.mode = ""
-
-def reset_mode():
     st.session_state.mode = ""
 
 if st.session_state.mode == "":
@@ -51,7 +47,7 @@ user_name = st.text_input("Enter your name (First Last):").strip()
 if not user_name:
     st.stop()
 
-# --- Helper: Get existing worksheet if it exists ---
+# --- Helper: Get worksheet ---
 def get_user_worksheet(name):
     try:
         return client.open_by_key(SHEET_ID_MAIN).worksheet(name)
@@ -61,52 +57,50 @@ def get_user_worksheet(name):
 worksheet = get_user_worksheet(user_name)
 
 # ======================
-# FUNCTION: Update totals row with ATA limits
+# FUNCTION: Update totals and count logic
 # ======================
 def update_totals(ws, events):
-    """Recalculate totals using ATA rules, remove old TOTALS, and sort by Date."""
-    all_values = ws.get_all_records()
-    df = pd.DataFrame(all_values)
+    all_data = ws.get_all_records()
+    df = pd.DataFrame(all_data)
     if df.empty:
         return
 
-    # Remove any existing TOTALS rows
-    df = df[df["Date"].astype(str).str.upper() != "TOTALS"]
-
-    # Sort by Date (convert safely)
+    df = df[df["Date"] != "TOTALS"]
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.sort_values("Date", ascending=True)
-    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
+    df = df.sort_values("Date").reset_index(drop=True)
 
-    # Convert numeric columns to numbers safely
-    for col in events:
-        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    # Remove any existing TOTALS row from worksheet
+    all_values = ws.get_all_values()
+    col_a = [row[0] for row in all_values if row]
+    if "TOTALS" in col_a:
+        totals_row_idx = col_a.index("TOTALS") + 1
+        ws.delete_rows(totals_row_idx)
 
-    # Calculate total points per row
-    df["TotalPoints"] = df[events].sum(axis=1)
+    # Identify which rows count toward totals
+    counted_flags = []
+    type_limits = {"Class AAA": 1, "Class AA": 2, "Class A": 5, "Class B": 5, "Class C": 3}
+    used = {t: 0 for t in type_limits.keys()}
 
-    # ATA limits
-    limits = {"Class AAA": 1, "Class AA": 2, "Class C": 3}
-    ab_limit = 5  # Combined A + B
+    for _, row in df.iterrows():
+        t_type = row["Type"]
+        if used.get(t_type, 0) < type_limits.get(t_type, 0):
+            counted_flags.append(True)
+            used[t_type] += 1
+        else:
+            counted_flags.append(False)
 
-    selected_rows = pd.DataFrame()
-    for t_type, limit in limits.items():
-        subset = df[df["Type"] == t_type].sort_values("TotalPoints", ascending=False)
-        selected_rows = pd.concat([selected_rows, subset.head(limit)])
+    df["Counted ✅"] = ["✅" if c else "" for c in counted_flags]
 
-    ab_subset = df[df["Type"].isin(["Class A", "Class B"])].sort_values("TotalPoints", ascending=False)
-    selected_rows = pd.concat([selected_rows, ab_subset.head(ab_limit)])
+    # Calculate totals only for counted tournaments
+    totals = ["TOTALS", "", ""]
+    for event in events:
+        totals.append(df.loc[df["Counted ✅"] == "✅", event].sum())
 
-    # Compute event totals from selected rows
-    totals = {col: selected_rows[col].sum() for col in events}
-
-    # Rewrite sheet — no old TOTALS line, always sorted
+    df = df.sort_values("Date").reset_index(drop=True)
     ws.clear()
-    ws.append_row(df.columns.drop("TotalPoints").tolist())
-    ws.append_rows(df.drop(columns=["TotalPoints"]).astype(str).values.tolist())
-
-    totals_row = ["TOTALS", "", "Counted Results"] + [str(round(totals.get(col, 0), 2)) for col in events]
-    ws.append_row(totals_row)
+    ws.append_row(df.columns.tolist())
+    ws.append_rows(df.values.tolist())
+    ws.append_row(totals)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
@@ -120,7 +114,7 @@ if st.session_state.mode == "Enter Tournament Scores":
         headers = [
             "Date", "Type", "Tournament Name",
             "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
-            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons", "Counted ✅"
         ]
         worksheet.append_row(headers)
         st.info("🆕 New worksheet created for this competitor.")
@@ -129,7 +123,6 @@ if st.session_state.mode == "Enter Tournament Scores":
     if not selected_tournament:
         st.stop()
 
-    # Lookup tournament info
     tourney_row = tournaments_df[tournaments_df["Tournament Name"] == selected_tournament].iloc[0]
     date = tourney_row["Date"]
     tourney_type = tourney_row["Type"]
@@ -142,11 +135,9 @@ if st.session_state.mode == "Enter Tournament Scores":
         "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
     ]
 
-    # Check for duplicates
     sheet_df = pd.DataFrame(worksheet.get_all_records())
     if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
         st.warning("⚠️ You have already entered results for this tournament.")
-        reset_mode()
         st.stop()
 
     st.subheader("Enter Your Results")
@@ -176,6 +167,8 @@ if st.session_state.mode == "Enter Tournament Scores":
                 new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
         worksheet.append_row(new_row)
+
+        # Resort + update totals
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved successfully!")
 
@@ -193,18 +186,26 @@ elif st.session_state.mode == "View Results":
     else:
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
+        df = df.sort_values("Date").reset_index(drop=True)
 
+        # Remove scrollbars and show full width
         st.markdown(
             """
             <style>
-            [data-testid="stDataFrameResizable"] div {overflow: visible !important;}
+            [data-testid="stDataFrameResizable"] div {
+                overflow: visible !important;
+            }
             [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
             [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-            div[data-testid="stDataFrameContainer"] {overflow: visible !important; width: 100% !important;}
+            div[data-testid="stDataFrameContainer"] {
+                overflow: visible !important;
+                width: 100% !important;
+            }
             </style>
             """,
             unsafe_allow_html=True,
         )
+
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ======================
@@ -222,14 +223,20 @@ elif st.session_state.mode == "Edit Results":
 
     df = pd.DataFrame(data)
     df = df[df["Date"] != "TOTALS"]
+    df = df.sort_values("Date").reset_index(drop=True)
 
     st.markdown(
         """
         <style>
-        [data-testid="stDataFrameResizable"] div {overflow: visible !important;}
+        [data-testid="stDataFrameResizable"] div {
+            overflow: visible !important;
+        }
         [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
         [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-        div[data-testid="stDataFrameContainer"] {overflow: visible !important; width: 100% !important;}
+        div[data-testid="stDataFrameContainer"] {
+            overflow: visible !important;
+            width: 100% !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -241,8 +248,10 @@ elif st.session_state.mode == "Edit Results":
         worksheet.clear()
         worksheet.append_row(df.columns.tolist())
         worksheet.append_rows(edited_df.values.tolist())
+
         update_totals(worksheet, [
             "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
             "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
         ])
+
         st.success("✅ Changes saved successfully and totals updated!")
