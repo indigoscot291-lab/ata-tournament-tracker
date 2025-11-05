@@ -40,13 +40,7 @@ if "mode" not in st.session_state:
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
-        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"],
-    )
-else:
-    st.session_state.mode = st.selectbox(
-        "Choose an option:",
-        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"],
-        index=["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"].index(st.session_state.mode),
+        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
     )
 
 # --- Get user name ---
@@ -64,28 +58,49 @@ def get_user_worksheet(name):
 worksheet = get_user_worksheet(user_name)
 
 # ======================
-# FUNCTION: Update totals row
+# FUNCTION: Update totals with ATA limits
 # ======================
 def update_totals(ws, events):
-    all_values = ws.get_all_values()
-    col_a = [row[0] for row in all_values if row]
+    all_values = ws.get_all_records()
+    df = pd.DataFrame(all_values)
+    if df.empty:
+        return
 
-    # Remove existing TOTALS row if any
-    if "TOTALS" in col_a:
-        totals_row_idx = col_a.index("TOTALS") + 1
-        ws.delete_rows(totals_row_idx)
-        all_values.pop(totals_row_idx - 1)
+    # Remove old totals row if it exists
+    df = df[df["Date"] != "TOTALS"]
 
-    # Insert totals row at the end
-    totals_row_idx = len(all_values) + 1
-    ws.update_cell(totals_row_idx, 1, "TOTALS")
+    # Convert numeric columns to numbers safely
+    for col in events:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    start_col_idx = 4  # D = first event column
-    for offset, _ in enumerate(events):
-        col_idx = start_col_idx + offset
-        col_letter = chr(64 + col_idx)
-        formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
-        ws.update_cell(totals_row_idx, col_idx, formula)
+    # Calculate total points per row
+    df["TotalPoints"] = df[events].sum(axis=1)
+
+    # Define ATA limits
+    limits = {"Class AAA": 1, "Class AA": 2, "Class C": 3}
+    ab_limit = 5  # Combined for A and B
+
+    # Select best tournaments by total points within each class group
+    selected_rows = pd.DataFrame()
+    for t_type, limit in limits.items():
+        subset = df[df["Type"] == t_type].sort_values("TotalPoints", ascending=False)
+        selected_rows = pd.concat([selected_rows, subset.head(limit)])
+
+    # Combined Class A + B
+    ab_subset = df[df["Type"].isin(["Class A", "Class B"])].sort_values("TotalPoints", ascending=False)
+    selected_rows = pd.concat([selected_rows, ab_subset.head(ab_limit)])
+
+    # Compute event totals only from selected rows
+    totals = {col: selected_rows[col].sum() for col in events}
+
+    # Rewrite sheet (keep all rows intact)
+    ws.clear()
+    ws.append_row(df.columns.drop("TotalPoints").tolist())
+    ws.append_rows(df.drop(columns=["TotalPoints"]).values.tolist())
+
+    # Append totals row at the end
+    totals_row = ["TOTALS", "", "Counted Results"] + [totals.get(col, 0) for col in events]
+    ws.append_row(totals_row)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
@@ -158,6 +173,7 @@ if st.session_state.mode == "Enter Tournament Scores":
         # Resort by date
         df = pd.DataFrame(worksheet.get_all_records())
         if "Date" in df.columns:
+            df = df[df["Date"] != "TOTALS"]
             df = df.sort_values("Date").reset_index(drop=True)
             worksheet.clear()
             worksheet.append_row(df.columns.tolist())
@@ -169,7 +185,7 @@ if st.session_state.mode == "Enter Tournament Scores":
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
-elif st.session_state.mode == "View Tournament Scores":
+elif st.session_state.mode == "View Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
@@ -181,6 +197,7 @@ elif st.session_state.mode == "View Tournament Scores":
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
 
+        # Remove scrollbars completely
         st.markdown(
             """
             <style>
@@ -203,7 +220,7 @@ elif st.session_state.mode == "View Tournament Scores":
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
-elif st.session_state.mode == "Edit Tournament Scores":
+elif st.session_state.mode == "Edit Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
