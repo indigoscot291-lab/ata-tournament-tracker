@@ -37,6 +37,9 @@ st.title("🏆 ATA Tournament Score Tracker")
 if "mode" not in st.session_state:
     st.session_state.mode = ""
 
+def reset_mode():
+    st.session_state.mode = ""
+
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
@@ -58,7 +61,7 @@ def get_user_worksheet(name):
 worksheet = get_user_worksheet(user_name)
 
 # ======================
-# FUNCTION: Update totals with ATA limits
+# FUNCTION: Update totals row with ATA limits
 # ======================
 def update_totals(ws, events):
     all_values = ws.get_all_records()
@@ -76,30 +79,28 @@ def update_totals(ws, events):
     # Calculate total points per row
     df["TotalPoints"] = df[events].sum(axis=1)
 
-    # Define ATA limits
+    # ATA limits
     limits = {"Class AAA": 1, "Class AA": 2, "Class C": 3}
-    ab_limit = 5  # Combined for A and B
+    ab_limit = 5  # Combined A + B
 
-    # Select best tournaments by total points within each class group
     selected_rows = pd.DataFrame()
     for t_type, limit in limits.items():
         subset = df[df["Type"] == t_type].sort_values("TotalPoints", ascending=False)
         selected_rows = pd.concat([selected_rows, subset.head(limit)])
 
-    # Combined Class A + B
     ab_subset = df[df["Type"].isin(["Class A", "Class B"])].sort_values("TotalPoints", ascending=False)
     selected_rows = pd.concat([selected_rows, ab_subset.head(ab_limit)])
 
-    # Compute event totals only from selected rows
+    # Compute event totals from selected rows
     totals = {col: selected_rows[col].sum() for col in events}
 
     # Rewrite sheet (keep all rows intact)
     ws.clear()
     ws.append_row(df.columns.drop("TotalPoints").tolist())
-    ws.append_rows(df.drop(columns=["TotalPoints"]).values.tolist())
+    ws.append_rows(df.drop(columns=["TotalPoints"]).astype(str).values.tolist())
 
-    # Append totals row at the end
-    totals_row = ["TOTALS", "", "Counted Results"] + [totals.get(col, 0) for col in events]
+    # Append totals row at end
+    totals_row = ["TOTALS", "", "Counted Results"] + [str(round(totals.get(col, 0), 2)) for col in events]
     ws.append_row(totals_row)
 
 # ======================
@@ -140,6 +141,7 @@ if st.session_state.mode == "Enter Tournament Scores":
     sheet_df = pd.DataFrame(worksheet.get_all_records())
     if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
         st.warning("⚠️ You have already entered results for this tournament.")
+        reset_mode()
         st.stop()
 
     st.subheader("Enter Your Results")
@@ -197,24 +199,17 @@ elif st.session_state.mode == "View Results":
         df = pd.DataFrame(data)
         df = df[df["Date"] != "TOTALS"]
 
-        # Remove scrollbars completely
         st.markdown(
             """
             <style>
-            [data-testid="stDataFrameResizable"] div {
-                overflow: visible !important;
-            }
+            [data-testid="stDataFrameResizable"] div {overflow: visible !important;}
             [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
             [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-            div[data-testid="stDataFrameContainer"] {
-                overflow: visible !important;
-                width: 100% !important;
-            }
+            div[data-testid="stDataFrameContainer"] {overflow: visible !important; width: 100% !important;}
             </style>
             """,
             unsafe_allow_html=True,
         )
-
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ======================
@@ -236,15 +231,10 @@ elif st.session_state.mode == "Edit Results":
     st.markdown(
         """
         <style>
-        [data-testid="stDataFrameResizable"] div {
-            overflow: visible !important;
-        }
+        [data-testid="stDataFrameResizable"] div {overflow: visible !important;}
         [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
         [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-        div[data-testid="stDataFrameContainer"] {
-            overflow: visible !important;
-            width: 100% !important;
-        }
+        div[data-testid="stDataFrameContainer"] {overflow: visible !important; width: 100% !important;}
         </style>
         """,
         unsafe_allow_html=True,
@@ -256,10 +246,8 @@ elif st.session_state.mode == "Edit Results":
         worksheet.clear()
         worksheet.append_row(df.columns.tolist())
         worksheet.append_rows(edited_df.values.tolist())
-
         update_totals(worksheet, [
             "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
             "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
         ])
-
         st.success("✅ Changes saved successfully and totals updated!")
