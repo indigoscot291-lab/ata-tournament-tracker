@@ -51,12 +51,9 @@ st.session_state.mode = ""
 def reset_mode():
 st.session_state.mode = ""
 
-# Always show main dropdown at top
-
 st.session_state.mode = st.selectbox(
 "Choose an option:",
 ["", "Enter Tournament Scores", "View Tournament Results", "Edit Tournament Results"],
-index=0
 )
 
 # --- Get user name ---
@@ -111,7 +108,6 @@ for offset, _ in enumerate(events):
 # ======================
 
 def highlight_counted_scores(df):
-# Rules
 type_limits = {"Class AAA": 1, "Class AA": 2, "Class A": 5, "Class B": 5, "Class C": 3}
 events = [
 "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
@@ -123,7 +119,6 @@ df = df.copy()
 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 df = df.sort_values("Date").reset_index(drop=True)
 
-# Determine which scores count
 counted = pd.DataFrame(False, index=df.index, columns=events)
 used = {k: 0 for k in type_limits}
 
@@ -249,7 +244,8 @@ def style_counted(x):
         color_df[col] = ["background-color: #b6fcb6" if val else "" for val in counted[col]]
     return color_df
 
-st.dataframe(pd.concat([df, totals_row], ignore_index=True).style.apply(style_counted, axis=None), use_container_width=True, hide_index=True)
+st.dataframe(pd.concat([df, totals_row], ignore_index=True), use_container_width=True, hide_index=True, 
+             style=style_counted(df))
 ```
 
 # ======================
