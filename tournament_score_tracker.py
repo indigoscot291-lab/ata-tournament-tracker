@@ -43,7 +43,7 @@ def reset_mode():
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
-        ["", "Enter Tournament Scores", "View Results", "Edit Results"],
+        ["", "Enter Tournament Scores", "View Tournament Results", "Edit Tournament Results"],
     )
 
 user_name = st.text_input("Enter your name (First Last):").strip()
@@ -68,12 +68,9 @@ def update_totals(ws, events):
 
     df = pd.DataFrame(data)
     df = df[df["Date"] != "TOTALS"]
-
-    # Convert dates safely
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.sort_values("Date", ascending=True).reset_index(drop=True)
 
-    # Determine which scores count
     type_limits = {"Class AAA": 1, "Class AA": 2, "Class A": 5, "Class B": 5, "Class C": 3}
     df["Counted ✅"] = ""
 
@@ -84,29 +81,24 @@ def update_totals(ws, events):
             df.at[i, "Counted ✅"] = "✅"
             used[t_type] += 1
 
-    # Remove existing TOTALS line from sheet if present
     all_values = ws.get_all_values()
     col_a = [r[0] for r in all_values if r]
     if "TOTALS" in col_a:
         idx = col_a.index("TOTALS") + 1
         ws.delete_rows(idx)
 
-    # Create totals row based only on ✅ rows
     totals = ["TOTALS", "", ""]
     for e in events:
         totals.append(df.loc[df["Counted ✅"] == "✅", e].sum())
     totals.append("")
 
-    # Convert to string to avoid JSON errors
     df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
     df = df.fillna("").astype(str)
 
-    # Rewrite sheet cleanly
     ws.clear()
     ws.append_row(df.columns.tolist())
     ws.append_rows(df.values.tolist())
     ws.append_row(totals)
-
 
 # ======================
 # ENTER TOURNAMENT SCORES
@@ -147,7 +139,6 @@ if st.session_state.mode == "Enter Tournament Scores":
         st.stop()
 
     st.subheader("Enter Your Results")
-
     results = {}
     for e in events:
         results[e] = st.number_input(f"{e} (Points)", min_value=0, step=1)
@@ -158,11 +149,10 @@ if st.session_state.mode == "Enter Tournament Scores":
         update_totals(worksheet, events)
         st.success("✅ Tournament results saved and totals updated!")
 
-
 # ======================
-# VIEW RESULTS
+# VIEW TOURNAMENT RESULTS
 # ======================
-elif st.session_state.mode == "View Results":
+elif st.session_state.mode == "View Tournament Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
@@ -175,11 +165,10 @@ elif st.session_state.mode == "View Results":
     df = pd.DataFrame(data[1:], columns=data[0])
     st.dataframe(df, use_container_width=True, hide_index=True)
 
-
 # ======================
-# EDIT RESULTS
+# EDIT TOURNAMENT RESULTS
 # ======================
-elif st.session_state.mode == "Edit Results":
+elif st.session_state.mode == "Edit Tournament Results":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
