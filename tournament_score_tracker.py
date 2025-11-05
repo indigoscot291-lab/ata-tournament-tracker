@@ -57,26 +57,31 @@ def get_user_worksheet(name):
 worksheet = get_user_worksheet(user_name)
 
 # ======================
-# FUNCTION: Update totals and count logic
+# FUNCTION: Update totals and retrofit checkmarks
 # ======================
 def update_totals(ws, events):
     all_data = ws.get_all_records()
-    df = pd.DataFrame(all_data)
-    if df.empty:
+    if not all_data:
         return
 
+    df = pd.DataFrame(all_data)
+    # Remove totals rows
     df = df[df["Date"] != "TOTALS"]
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # Remove any existing TOTALS row from worksheet
+    # Ensure Counted ✅ column exists
+    if "Counted ✅" not in df.columns:
+        df["Counted ✅"] = ""
+
+    # Remove existing TOTALS row if it exists in raw values
     all_values = ws.get_all_values()
     col_a = [row[0] for row in all_values if row]
     if "TOTALS" in col_a:
         totals_row_idx = col_a.index("TOTALS") + 1
         ws.delete_rows(totals_row_idx)
 
-    # Identify which rows count toward totals
+    # Determine which rows count toward totals
     counted_flags = []
     type_limits = {"Class AAA": 1, "Class AA": 2, "Class A": 5, "Class B": 5, "Class C": 3}
     used = {t: 0 for t in type_limits.keys()}
@@ -91,12 +96,13 @@ def update_totals(ws, events):
 
     df["Counted ✅"] = ["✅" if c else "" for c in counted_flags]
 
-    # Calculate totals only for counted tournaments
+    # Build totals
     totals = ["TOTALS", "", ""]
     for event in events:
         totals.append(df.loc[df["Counted ✅"] == "✅", event].sum())
+    totals.append("")  # for Counted ✅ column
 
-    df = df.sort_values("Date").reset_index(drop=True)
+    # Write everything back sorted
     ws.clear()
     ws.append_row(df.columns.tolist())
     ws.append_rows(df.values.tolist())
@@ -165,6 +171,7 @@ if st.session_state.mode == "Enter Tournament Scores":
                 new_row.append(results[event])
             else:
                 new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
+        new_row.append("")  # Counted ✅ placeholder
 
         worksheet.append_row(new_row)
 
@@ -180,33 +187,38 @@ elif st.session_state.mode == "View Results":
         st.info("There are no Tournament Scores for this person.")
         st.stop()
 
-    data = worksheet.get_all_records()
-    if not data:
+    data = worksheet.get_all_values()
+    if not data or len(data) < 2:
         st.info("There are no Tournament Scores for this person.")
-    else:
-        df = pd.DataFrame(data)
-        df = df[df["Date"] != "TOTALS"]
-        df = df.sort_values("Date").reset_index(drop=True)
+        st.stop()
 
-        # Remove scrollbars and show full width
-        st.markdown(
-            """
-            <style>
-            [data-testid="stDataFrameResizable"] div {
-                overflow: visible !important;
-            }
-            [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
-            [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-            div[data-testid="stDataFrameContainer"] {
-                overflow: visible !important;
-                width: 100% !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
+    headers = data[0]
+    rows = data[1:]
+    df = pd.DataFrame(rows, columns=headers)
 
-        st.dataframe(df, use_container_width=True, hide_index=True)
+    # Ensure correct order & show totals
+    if "Date" in df.columns:
+        df = df[df["Date"] != ""]
+        df = df.sort_values("Date", ascending=True, na_position="last")
+
+    st.markdown(
+        """
+        <style>
+        [data-testid="stDataFrameResizable"] div {
+            overflow: visible !important;
+        }
+        [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
+        [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
+        div[data-testid="stDataFrameContainer"] {
+            overflow: visible !important;
+            width: 100% !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ======================
 # MODE 3: EDIT RESULTS
