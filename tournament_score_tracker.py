@@ -107,7 +107,7 @@ for offset, _ in enumerate(events):
 
 # ======================
 
-# FUNCTION: Determine counted scores based on ATA rules
+# FUNCTION: Highlight counted scores based on ATA rules
 
 # ======================
 
@@ -122,37 +122,26 @@ df = df.copy()
 df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 df = df.sort_values("Date").reset_index(drop=True)
 
-# Initialize counted flags
 counted = pd.DataFrame(False, index=df.index, columns=events)
 
-# Process each event column independently
 for event in events:
     scores = df[event].fillna(0).astype(float)
     types = df["Type"]
 
-    # Separate by class
     class_aaa_idx = types[types == "Class AAA"].index
     class_aa_idx = types[types == "Class AA"].index
     class_a_b_idx = types[types.isin(["Class A","Class B"])].index
     class_c_idx = types[types == "Class C"].index
 
-    # Count rules
-    # Class AAA: 1 best
     if len(class_aaa_idx) > 0:
         top_idx = scores.loc[class_aaa_idx].nlargest(1).index
         counted.loc[top_idx, event] = True
-
-    # Class AA: 2 best
     if len(class_aa_idx) > 0:
         top_idx = scores.loc[class_aa_idx].nlargest(2).index
         counted.loc[top_idx, event] = True
-
-    # Class A & B: combined 5 best
     if len(class_a_b_idx) > 0:
         top_idx = scores.loc[class_a_b_idx].nlargest(5).index
         counted.loc[top_idx, event] = True
-
-    # Class C: 3 best
     if len(class_c_idx) > 0:
         top_idx = scores.loc[class_c_idx].nlargest(3).index
         counted.loc[top_idx, event] = True
@@ -167,7 +156,6 @@ return counted
 # ======================
 
 if st.session_state.mode == "Enter Tournament Scores":
-# Create worksheet if missing
 if worksheet is None:
 worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
 title=user_name, rows=200, cols=20
@@ -185,7 +173,6 @@ selected_tournament = st.selectbox("Select Tournament:", [""] + tournaments)
 if not selected_tournament:
     st.stop()
 
-# Lookup tournament info
 tourney_row = tournaments_df[tournaments_df["Tournament Name"] == selected_tournament].iloc[0]
 date = tourney_row["Date"]
 tourney_type = tourney_row["Type"]
@@ -198,7 +185,6 @@ events = [
     "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
 ]
 
-# Check for duplicates
 sheet_df = pd.DataFrame(worksheet.get_all_records())
 if not sheet_df.empty and ((sheet_df["Date"] == date) & (sheet_df["Tournament Name"] == selected_tournament)).any():
     st.warning("⚠️ You have already entered results for this tournament.")
@@ -232,7 +218,6 @@ if st.button("💾 Save Results"):
 
     worksheet.append_row(new_row)
 
-    # Resort by date
     df = pd.DataFrame(worksheet.get_all_records())
     if "Date" in df.columns:
         df = df.sort_values("Date").reset_index(drop=True)
@@ -266,18 +251,14 @@ df = df[df["Date"] != "TOTALS"]
 
 counted = highlight_counted_scores(df)
 
-# Style with green background for counted scores
 def style_counted(x):
     color_df = pd.DataFrame("", index=x.index, columns=x.columns)
     for col in counted.columns:
         color_df[col] = ["background-color: #b6fcb6" if val else "" for val in counted[col]]
     return color_df
 
-# Append totals row to bottom
 display_df = pd.concat([df, totals_row], ignore_index=True)
-
-st.dataframe(display_df, use_container_width=True, hide_index=True, 
-             style=style_counted(df))
+st.dataframe(display_df, use_container_width=True, hide_index=True, style=style_counted(df))
 ```
 
 # ======================
@@ -306,7 +287,6 @@ if st.button("💾 Save Changes"):
     worksheet.clear()
     worksheet.append_row(df.columns.tolist())
     worksheet.append_rows(edited_df.values.tolist())
-
     update_totals(worksheet, [
         "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
         "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
