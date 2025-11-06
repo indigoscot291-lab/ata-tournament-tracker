@@ -118,8 +118,8 @@ def update_totals(ws, events):
     ws.append_row(df.drop(columns=["Total"]).columns.tolist())
     ws.append_rows(rows)
 
-    # Insert Totals row
-    ws.append_row(["Totals", ""] + counted_totals)
+    # Insert Totals row aligned under event columns (starts at column D)
+    ws.append_row(["Totals", "", ""] + counted_totals)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
