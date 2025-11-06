@@ -124,29 +124,6 @@ for offset, _ in enumerate(events):
 
 # ======================
 
-# FUNCTION: Compute ATA totals in Python
-
-# ======================
-
-def compute_ata_totals(df, events):
-totals_row = {"Date": "TOTALS", "Type": "", "Tournament Name": ""}
-
-```
-for event in events:
-    col_values = df[[event, "Type"]]
-    
-    aaa_total = col_values[col_values["Type"]=="AAA"][event].sum()
-    aa_total = col_values[col_values["Type"]=="AA"][event].nlargest(2).sum()
-    ab_total = col_values[col_values["Type"].isin(["A","B"])][event].nlargest(5).sum()
-    c_total = col_values[col_values["Type"]=="C"][event].nlargest(3).sum()
-    
-    totals_row[event] = aaa_total + aa_total + ab_total + c_total
-
-return pd.DataFrame([totals_row])
-```
-
-# ======================
-
 # MODE 1: ENTER TOURNAMENT SCORES
 
 # ======================
@@ -248,14 +225,6 @@ else:
     headers = data[0]
     df = pd.DataFrame(data[1:], columns=headers)
 
-    # Compute totals with ATA logic
-    events = [
-        "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
-        "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
-    ]
-    totals_df = compute_ata_totals(df, events)
-    df = pd.concat([df, totals_df], ignore_index=True)
-
     st.markdown(
         """
         <style>
@@ -273,6 +242,7 @@ else:
         unsafe_allow_html=True,
     )
 
+    # ✅ Display totals (includes TOTALS row)
     st.dataframe(df, use_container_width=True, hide_index=True)
 ```
 
@@ -313,15 +283,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-events = [
-    "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
-    "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
-]
-totals_df = compute_ata_totals(df, events)
-display_df = pd.concat([df, totals_df], ignore_index=True)
-
 edited_df = st.data_editor(
-    display_df,
+    df,
     num_rows="dynamic",
     use_container_width=True,
     hide_index=True
@@ -332,7 +295,10 @@ if st.button("💾 Save Changes"):
     worksheet.append_row(df.columns.tolist())
     worksheet.append_rows(edited_df.values.tolist())
 
-    update_totals(worksheet, events)
+    update_totals(worksheet, [
+        "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+        "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+    ])
 
-    st.success("✅ Changes saved successfully and totals updated!")  
+    st.success("✅ Changes saved successfully and totals updated!")
 ```
