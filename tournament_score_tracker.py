@@ -190,11 +190,12 @@ elif st.session_state.mode == "View Tournament Scores":
         st.info("There are no Tournament Scores for this person.")
         st.stop()
 
-    data = worksheet.get_all_records()
+    data = worksheet.get_all_values()
     if not data:
         st.info("There are no Tournament Scores for this person.")
     else:
-        df = pd.DataFrame(data)
+        headers = data[0]
+        df = pd.DataFrame(data[1:], columns=headers)
 
         st.markdown(
             """
@@ -213,6 +214,7 @@ elif st.session_state.mode == "View Tournament Scores":
             unsafe_allow_html=True,
         )
 
+        # ✅ Display totals (includes TOTALS row)
         st.dataframe(df, use_container_width=True, hide_index=True)
 
 # ======================
@@ -248,6 +250,7 @@ elif st.session_state.mode == "Edit Tournament Scores":
         unsafe_allow_html=True,
     )
 
+    # ✅ Hide index in edit table
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
 
     if st.button("💾 Save Changes"):
