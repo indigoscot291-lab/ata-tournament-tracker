@@ -84,26 +84,44 @@ worksheet = get_user_worksheet(user_name)
 # ======================
 def update_totals(ws, events):
     all_values = ws.get_all_values()
-    if len(all_values) <= 1:
-        return
-        df = pd.DataFrame(all_values[1:], columns=all_values[0])
-        totals_row = ["TOTALS", "", ""]
+    col_a = [row[0] for row in all_values if row]
 
-for event in events:
-    col_points = df[event].fillna(0).astype(int)
-    aaa_points = col_points[df["Type"] == "Class AAA"].sum()
-    aa_points = col_points[df["Type"] == "Class AA"].nlargest(2).sum()
-    a_b_points = col_points[df["Type"].isin(["Class A", "Class B"])].nlargest(5).sum()
-    c_points = col_points[df["Type"] == "Class C"].nlargest(3).sum()
-    total_event_points = aaa_points + aa_points + a_b_points + c_points
-    totals_row.append(total_event_points)
+    # Remove existing TOTALS and ATA TOTAL rows if any
+    for label in ["TOTALS", "ATA TOTAL"]:
+        if label in col_a:
+            idx = col_a.index(label) + 1
+            ws.delete_rows(idx)
+            all_values.pop(idx - 1)
 
-col_a = [row[0] for row in all_values if row]
-if "TOTALS" in col_a:
-    totals_row_idx = col_a.index("TOTALS") + 1
-    ws.delete_rows(totals_row_idx)
+    # Insert TOTALS row at the end
+    totals_row_idx = len(all_values) + 1
+    ws.update_cell(totals_row_idx, 1, "TOTALS")
 
-ws.append_row(totals_row)
+    start_col_idx = 4  # D = first event column
+    for offset, _ in enumerate(events):
+        col_idx = start_col_idx + offset
+        col_letter = chr(64 + col_idx)
+        formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
+        ws.update_cell(totals_row_idx, col_idx, formula)
+
+    # ======================
+    # ATA TOTAL row
+    # ======================
+    df = pd.DataFrame(ws.get_all_records())
+    df = df[df["Date"] != "TOTALS"]
+    df["Total"] = df[events].sum(axis=1)
+
+    # Apply ATA rules
+    aaa = df[df["Type"] == "Class AAA"].sort_values("Total", ascending=False).head(1)
+    aa = df[df["Type"] == "Class AA"].sort_values("Total", ascending=False).head(2)
+    ab = df[df["Type"].isin(["Class A", "Class B"])].sort_values("Total", ascending=False).head(5)
+    c = df[df["Type"] == "Class C"].sort_values("Total", ascending=False).head(3)
+
+    ata_total = pd.concat([aaa, aa, ab, c])["Total"].sum()
+
+    ata_row_idx = totals_row_idx + 1
+    ws.update_cell(ata_row_idx, 1, "ATA TOTAL")
+    ws.update_cell(ata_row_idx, 2, ata_total)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
@@ -205,61 +223,3 @@ elif st.session_state.mode == "View Tournament Scores":
                 overflow: visible !important;
             }
             [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
-            [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-            div[data-testid="stDataFrameContainer"] {
-                overflow: visible !important;
-                width: 100% !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
-        st.dataframe(df, use_container_width=True, hide_index=True)
-
-# ======================
-# MODE 3: EDIT RESULTS
-# ======================
-elif st.session_state.mode == "Edit Tournament Scores":
-    if worksheet is None:
-        st.info("There are no Tournament Scores for this person.")
-        st.stop()
-
-    data = worksheet.get_all_records()
-    if not data:
-        st.info("There are no Tournament Scores for this person.")
-        st.stop()
-
-    df = pd.DataFrame(data)
-    df = df[df["Date"] != "TOTALS"]
-
-    st.markdown(
-        """
-        <style>
-        [data-testid="stDataFrameResizable"] div {
-            overflow: visible !important;
-        }
-        [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
-        [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
-        div[data-testid="stDataFrameContainer"] {
-            overflow: visible !important;
-            width: 100% !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
-
-    if st.button("💾 Save Changes"):
-        worksheet.clear()
-        worksheet.append_row(df.columns.tolist())
-        worksheet.append_rows(edited_df.values.tolist())
-
-        update_totals(worksheet, [
-            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
-            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
-        ])
-
-        st.success("✅ Changes saved successfully and totals updated!")
