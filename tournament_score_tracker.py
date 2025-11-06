@@ -83,22 +83,22 @@ worksheet = get_user_worksheet(user_name)
 # FUNCTION: Update totals row (ATA TOTAL only)
 # ======================
 def update_totals(ws, events):
+    # Get all values and remove existing "Totals" row
     all_values = ws.get_all_values()
     col_a = [row[0] for row in all_values if row]
 
-    # Remove existing TOTALS and ATA TOTAL rows
-    for label in ["TOTALS", "ATA TOTAL"]:
-        if label in col_a:
-            idx = col_a.index(label) + 1
-            ws.delete_rows(idx)
+    if "Totals" in col_a:
+        idx = col_a.index("Totals") + 1
+        ws.delete_rows(idx)
 
     # Load and clean data
     df = pd.DataFrame(ws.get_all_records())
-    df = df[~df["Date"].isin(["TOTALS", "ATA TOTAL"])]
+    df = df[~df["Date"].isin(["Totals"])]
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df[df["Date"].notna()]
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # Calculate totals
+    # Calculate row totals
     df["Total"] = df[events].sum(axis=1)
 
     # ATA rules
@@ -106,18 +106,20 @@ def update_totals(ws, events):
     aa = df[df["Type"] == "Class AA"].nlargest(2, "Total")
     ab = df[df["Type"].isin(["Class A", "Class B"])].nlargest(5, "Total")
     c = df[df["Type"] == "Class C"].nlargest(3, "Total")
-    ata_total = pd.concat([aaa, aa, ab, c])["Total"].sum()
 
-    # Clean for upload
-    df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
-    df = df.drop(columns=["Total"])
-    rows = df.fillna("").astype(str).values.tolist()
+    counted_df = pd.concat([aaa, aa, ab, c])
+    counted_totals = counted_df[events].sum().tolist()
 
     # Rebuild sheet
+    df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
+    rows = df.drop(columns=["Total"]).fillna("").astype(str).values.tolist()
+
     ws.clear()
-    ws.append_row(df.columns.tolist())
+    ws.append_row(df.drop(columns=["Total"]).columns.tolist())
     ws.append_rows(rows)
-    ws.append_row(["ATA TOTAL", ata_total])
+
+    # Insert Totals row
+    ws.append_row(["Totals", ""] + counted_totals)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
