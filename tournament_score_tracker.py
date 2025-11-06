@@ -91,37 +91,33 @@ def update_totals(ws, events):
         if label in col_a:
             idx = col_a.index(label) + 1
             ws.delete_rows(idx)
-            all_values.pop(idx - 1)
 
-    # Prepare DataFrame
+    # Load and clean data
     df = pd.DataFrame(ws.get_all_records())
-    df = df[df["Date"] != "TOTALS"]
-    df = df[df["Date"] != "ATA TOTAL"]
-
-    # Ensure proper sorting
-    if "Date" in df.columns:
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-        df = df.sort_values("Date").reset_index(drop=True)
-
-    # Rebuild worksheet with sorted data
-    worksheet.clear()
-    worksheet.append_row(df.columns.tolist())
-    worksheet.append_rows(df.values.tolist())
+    df = df[~df["Date"].isin(["TOTALS", "ATA TOTAL"])]
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.sort_values("Date").reset_index(drop=True)
 
     # Calculate totals
     df["Total"] = df[events].sum(axis=1)
 
-    aaa = df[df["Type"] == "Class AAA"].sort_values("Total", ascending=False).head(1)
-    aa = df[df["Type"] == "Class AA"].sort_values("Total", ascending=False).head(2)
-    ab = df[df["Type"].isin(["Class A", "Class B"])].sort_values("Total", ascending=False).head(5)
-    c = df[df["Type"] == "Class C"].sort_values("Total", ascending=False).head(3)
-
+    # ATA rules
+    aaa = df[df["Type"] == "Class AAA"].nlargest(1, "Total")
+    aa = df[df["Type"] == "Class AA"].nlargest(2, "Total")
+    ab = df[df["Type"].isin(["Class A", "Class B"])].nlargest(5, "Total")
+    c = df[df["Type"] == "Class C"].nlargest(3, "Total")
     ata_total = pd.concat([aaa, aa, ab, c])["Total"].sum()
 
-    # Insert ATA TOTAL row
-    ata_row_idx = len(df) + 2
-    ws.update_cell(ata_row_idx, 1, "ATA TOTAL")
-    ws.update_cell(ata_row_idx, 2, ata_total)
+    # Clean for upload
+    df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
+    df = df.drop(columns=["Total"])
+    rows = df.fillna("").astype(str).values.tolist()
+
+    # Rebuild sheet
+    ws.clear()
+    ws.append_row(df.columns.tolist())
+    ws.append_rows(rows)
+    ws.append_row(["ATA TOTAL", ata_total])
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
@@ -178,7 +174,7 @@ if st.session_state.mode == "Enter Tournament Scores":
         POINTS_MAP = {
             "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
             "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
-            "Class AA": {"1st": 15, "2nd": 10, "3rd": 5},
+            "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
             "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
         }
 
