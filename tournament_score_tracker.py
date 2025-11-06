@@ -89,7 +89,6 @@ def update_totals(ws, events):
         df = pd.DataFrame(all_values[1:], columns=all_values[0])
         totals_row = ["TOTALS", "", ""]
 
-```
 for event in events:
     col_points = df[event].fillna(0).astype(int)
     aaa_points = col_points[df["Type"] == "Class AAA"].sum()
@@ -105,7 +104,6 @@ if "TOTALS" in col_a:
     ws.delete_rows(totals_row_idx)
 
 ws.append_row(totals_row)
-```
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
