@@ -179,8 +179,8 @@ elif st.session_state.mode == "View Tournament Scores":
         st.info("There are no Tournament Scores for this person.")
     else:
         df = pd.DataFrame(data)
-        df = df[df["Date"] != "TOTALS"]
 
+        # ✅ Include TOTALS row now
         st.markdown(
             """
             <style>
