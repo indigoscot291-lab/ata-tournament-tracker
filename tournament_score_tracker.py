@@ -334,5 +334,5 @@ if st.button("💾 Save Changes"):
 
     update_totals(worksheet, events)
 
-    st.success("✅ Changes saved successfully and totals updated!")
+    st.success("✅ Changes saved successfully and totals updated!")  
 ```
