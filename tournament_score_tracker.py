@@ -86,18 +86,31 @@ def update_totals(ws, events):
     all_values = ws.get_all_values()
     col_a = [row[0] for row in all_values if row]
 
-    # Remove existing ATA TOTAL row if any
-    if "ATA TOTAL" in col_a:
-        ata_row_idx = col_a.index("ATA TOTAL") + 1
-        ws.delete_rows(ata_row_idx)
-        all_values.pop(ata_row_idx - 1)
+    # Remove existing TOTALS and ATA TOTAL rows
+    for label in ["TOTALS", "ATA TOTAL"]:
+        if label in col_a:
+            idx = col_a.index(label) + 1
+            ws.delete_rows(idx)
+            all_values.pop(idx - 1)
 
     # Prepare DataFrame
     df = pd.DataFrame(ws.get_all_records())
+    df = df[df["Date"] != "TOTALS"]
     df = df[df["Date"] != "ATA TOTAL"]
+
+    # Ensure proper sorting
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.sort_values("Date").reset_index(drop=True)
+
+    # Rebuild worksheet with sorted data
+    worksheet.clear()
+    worksheet.append_row(df.columns.tolist())
+    worksheet.append_rows(df.values.tolist())
+
+    # Calculate totals
     df["Total"] = df[events].sum(axis=1)
 
-    # Apply ATA rules
     aaa = df[df["Type"] == "Class AAA"].sort_values("Total", ascending=False).head(1)
     aa = df[df["Type"] == "Class AA"].sort_values("Total", ascending=False).head(2)
     ab = df[df["Type"].isin(["Class A", "Class B"])].sort_values("Total", ascending=False).head(5)
@@ -105,8 +118,8 @@ def update_totals(ws, events):
 
     ata_total = pd.concat([aaa, aa, ab, c])["Total"].sum()
 
-    # Insert ATA TOTAL row at the end
-    ata_row_idx = len(all_values) + 1
+    # Insert ATA TOTAL row
+    ata_row_idx = len(df) + 2
     ws.update_cell(ata_row_idx, 1, "ATA TOTAL")
     ws.update_cell(ata_row_idx, 2, ata_total)
 
