@@ -85,9 +85,9 @@ worksheet = get_user_worksheet(user_name)
 def update_totals(ws, events):
     all_values = ws.get_all_values()
     if len(all_values) <= 1:
-    return
-    df = pd.DataFrame(all_values[1:], columns=all_values[0])
-    totals_row = ["TOTALS", "", ""]
+        return
+        df = pd.DataFrame(all_values[1:], columns=all_values[0])
+        totals_row = ["TOTALS", "", ""]
 
 ```
 for event in events:
