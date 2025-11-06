@@ -80,35 +80,21 @@ def get_user_worksheet(name):
 worksheet = get_user_worksheet(user_name)
 
 # ======================
-# FUNCTION: Update totals row
+# FUNCTION: Update totals row (ATA TOTAL only)
 # ======================
 def update_totals(ws, events):
     all_values = ws.get_all_values()
     col_a = [row[0] for row in all_values if row]
 
-    # Remove existing TOTALS and ATA TOTAL rows if any
-    for label in ["TOTALS", "ATA TOTAL"]:
-        if label in col_a:
-            idx = col_a.index(label) + 1
-            ws.delete_rows(idx)
-            all_values.pop(idx - 1)
+    # Remove existing ATA TOTAL row if any
+    if "ATA TOTAL" in col_a:
+        ata_row_idx = col_a.index("ATA TOTAL") + 1
+        ws.delete_rows(ata_row_idx)
+        all_values.pop(ata_row_idx - 1)
 
-    # Insert TOTALS row at the end
-    totals_row_idx = len(all_values) + 1
-    ws.update_cell(totals_row_idx, 1, "TOTALS")
-
-    start_col_idx = 4  # D = first event column
-    for offset, _ in enumerate(events):
-        col_idx = start_col_idx + offset
-        col_letter = chr(64 + col_idx)
-        formula = f"=SUM({col_letter}2:{col_letter}{totals_row_idx - 1})"
-        ws.update_cell(totals_row_idx, col_idx, formula)
-
-    # ======================
-    # ATA TOTAL row
-    # ======================
+    # Prepare DataFrame
     df = pd.DataFrame(ws.get_all_records())
-    df = df[df["Date"] != "TOTALS"]
+    df = df[df["Date"] != "ATA TOTAL"]
     df["Total"] = df[events].sum(axis=1)
 
     # Apply ATA rules
@@ -119,7 +105,8 @@ def update_totals(ws, events):
 
     ata_total = pd.concat([aaa, aa, ab, c])["Total"].sum()
 
-    ata_row_idx = totals_row_idx + 1
+    # Insert ATA TOTAL row at the end
+    ata_row_idx = len(all_values) + 1
     ws.update_cell(ata_row_idx, 1, "ATA TOTAL")
     ws.update_cell(ata_row_idx, 2, ata_total)
 
@@ -166,3 +153,117 @@ if st.session_state.mode == "Enter Tournament Scores":
     st.subheader("Enter Your Results")
 
     results = {}
+    if tourney_type == "Class C":
+        for event in events:
+            results[event] = st.number_input(f"{event} (Points)", min_value=0, step=1)
+    else:
+        places = ["", "1st", "2nd", "3rd"]
+        for event in events:
+            results[event] = st.selectbox(f"{event} (Place)", places, key=event)
+
+    if st.button("💾 Save Results"):
+        POINTS_MAP = {
+            "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
+            "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
+            "Class AA": {"1st": 15, "2nd": 10, "3rd": 5},
+            "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+        }
+
+        new_row = [date, tourney_type, selected_tournament]
+        for event in events:
+            if tourney_type == "Class C":
+                new_row.append(results[event])
+            else:
+                new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
+
+        worksheet.append_row(new_row)
+
+        # Resort by date
+        df = pd.DataFrame(worksheet.get_all_records())
+        if "Date" in df.columns:
+            df = df.sort_values("Date").reset_index(drop=True)
+            worksheet.clear()
+            worksheet.append_row(df.columns.tolist())
+            worksheet.append_rows(df.values.tolist())
+
+        update_totals(worksheet, events)
+        st.success("✅ Tournament results saved successfully!")
+
+# ======================
+# MODE 2: VIEW RESULTS
+# ======================
+elif st.session_state.mode == "View Tournament Scores":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
+
+    data = worksheet.get_all_records()
+    if not data:
+        st.info("There are no Tournament Scores for this person.")
+    else:
+        df = pd.DataFrame(data)
+
+        st.markdown(
+            """
+            <style>
+            [data-testid="stDataFrameResizable"] div {
+                overflow: visible !important;
+            }
+            [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
+            [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
+            div[data-testid="stDataFrameContainer"] {
+                overflow: visible !important;
+                width: 100% !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.dataframe(df, use_container_width=True, hide_index=True)
+# ======================
+# MODE 3: EDIT RESULTS
+# ======================
+elif st.session_state.mode == "Edit Tournament Scores":
+    if worksheet is None:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
+
+    data = worksheet.get_all_records()
+    if not data:
+        st.info("There are no Tournament Scores for this person.")
+        st.stop()
+
+    df = pd.DataFrame(data)
+    df = df[df["Date"] != "ATA TOTAL"]
+
+    st.markdown(
+        """
+        <style>
+        [data-testid="stDataFrameResizable"] div {
+            overflow: visible !important;
+        }
+        [data-testid="stHorizontalBlock"] {overflow-x: visible !important;}
+        [data-testid="stVerticalBlock"] {overflow-y: visible !important;}
+        div[data-testid="stDataFrameContainer"] {
+            overflow: visible !important;
+            width: 100% !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
+
+    if st.button("💾 Save Changes"):
+        worksheet.clear()
+        worksheet.append_row(df.columns.tolist())
+        worksheet.append_rows(edited_df.values.tolist())
+
+        update_totals(worksheet, [
+            "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+            "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+        ])
+
+        st.success("✅ Changes saved successfully and ATA total updated!")
