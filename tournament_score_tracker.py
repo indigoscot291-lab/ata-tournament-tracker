@@ -49,8 +49,24 @@ else:
         index=["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"].index(st.session_state.mode),
     )
 
-# --- Get user name ---
-user_name = st.text_input("Enter your name (First Last):").strip()
+# --- Get list of existing worksheet names ---
+try:
+    existing_names = [ws.title for ws in client.open_by_key(SHEET_ID_MAIN).worksheets()]
+except Exception:
+    existing_names = []
+
+# --- Get user name (different behavior by mode) ---
+if st.session_state.mode == "Enter Tournament Scores":
+    user_name_option = st.selectbox("Select existing competitor or add new:", [""] + existing_names + ["Add New Competitor"])
+    if user_name_option == "Add New Competitor" or user_name_option == "":
+        user_name = st.text_input("Enter new competitor name (First Last):").strip()
+    else:
+        user_name = user_name_option
+elif st.session_state.mode in ["View Tournament Scores", "Edit Tournament Scores"]:
+    user_name = st.selectbox("Select Competitor:", [""] + existing_names)
+else:
+    user_name = ""
+
 if not user_name:
     st.stop()
 
@@ -180,7 +196,6 @@ elif st.session_state.mode == "View Tournament Scores":
     else:
         df = pd.DataFrame(data)
 
-        # ✅ Include TOTALS row now
         st.markdown(
             """
             <style>
