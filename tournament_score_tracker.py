@@ -281,12 +281,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-edited_df = st.data_editor(
-    df.reset_index(drop=True),
-    num_rows="dynamic",
-    use_container_width=True,
-    hide_index=True
-)
+# --- Only change: hide_index like view ---
+edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
 
 if st.button("💾 Save Changes"):
     worksheet.clear()
