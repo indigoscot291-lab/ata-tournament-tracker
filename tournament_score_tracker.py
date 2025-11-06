@@ -250,7 +250,7 @@ elif st.session_state.mode == "Edit Tournament Scores":
         unsafe_allow_html=True,
     )
 
-    # ✅ Hide index in edit table
+    # ✅ Hide index in edit table (ONLY CHANGE)
     edited_df = st.data_editor(df, num_rows="dynamic", use_container_width=True, hide_index=True)
 
     if st.button("💾 Save Changes"):
