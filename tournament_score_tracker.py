@@ -104,31 +104,23 @@ all_values = ws.get_all_values()
 if len(all_values) <= 1:
 return
 df = pd.DataFrame(all_values[1:], columns=all_values[0])
-totals_row = ["TOTALS", "", ""]  # Date, Type, Tournament Name
+totals_row = ["TOTALS", "", ""]
 
 ```
 for event in events:
     col_points = df[event].fillna(0).astype(int)
-
-    # AAA only
     aaa_points = col_points[df["Type"] == "Class AAA"].sum()
-    # best 2 AA
     aa_points = col_points[df["Type"] == "Class AA"].nlargest(2).sum()
-    # best 5 A+B
     a_b_points = col_points[df["Type"].isin(["Class A", "Class B"])].nlargest(5).sum()
-    # best 3 C
     c_points = col_points[df["Type"] == "Class C"].nlargest(3).sum()
-
     total_event_points = aaa_points + aa_points + a_b_points + c_points
     totals_row.append(total_event_points)
 
-# Remove existing TOTALS row if any
 col_a = [row[0] for row in all_values if row]
 if "TOTALS" in col_a:
     totals_row_idx = col_a.index("TOTALS") + 1
     ws.delete_rows(totals_row_idx)
 
-# Append totals row
 ws.append_row(totals_row)
 ```
 
@@ -139,7 +131,6 @@ ws.append_row(totals_row)
 # ======================
 
 if st.session_state.mode == "Enter Tournament Scores":
-# Create worksheet if missing
 if worksheet is None:
 worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
 title=user_name, rows=200, cols=20
@@ -301,3 +292,4 @@ if st.button("💾 Save Changes"):
     ])
 
     st.success("✅ Changes saved successfully and totals updated!")
+```
