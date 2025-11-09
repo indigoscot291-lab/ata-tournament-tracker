@@ -37,10 +37,6 @@ st.title("🏆 ATA Tournament Score Tracker")
 if "mode" not in st.session_state:
     st.session_state.mode = ""
 
-if st.session_state.get("saved", False):
-    st.session_state.mode = ""
-    st.session_state.saved = False
-
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
@@ -192,7 +188,7 @@ if st.session_state.mode == "Enter Tournament Scores":
             else:
                 new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
-        worksheet.append_row(new_row)
+    worksheet.append_row(new_row)
 
     # Resort by date
     df = pd.DataFrame(worksheet.get_all_records())
@@ -205,8 +201,10 @@ if st.session_state.mode == "Enter Tournament Scores":
     update_totals(worksheet, events)
     st.success("✅ Tournament results saved successfully!")
 
-    # Set flag to reset UI
-    st.session_state.saved = True
+    # ✅ Reset mode to return to main menu
+    st.session_state.mode = ""
+    st.session_state.saved = False
+
 
 # ======================
 # MODE 2: VIEW RESULTS
