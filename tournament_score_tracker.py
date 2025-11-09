@@ -178,21 +178,21 @@ if st.session_state.mode == "Enter Tournament Scores":
             results[event] = st.selectbox(f"{event} (Place)", places, key=event)
 
     if st.button("💾 Save Results"):
-    POINTS_MAP = {
-        "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
-        "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
-        "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
-        "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
-    }
+        POINTS_MAP = {
+            "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
+            "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
+            "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
+            "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+        }
 
-    new_row = [date, tourney_type, selected_tournament]
-    for event in events:
-        if tourney_type == "Class C":
-            new_row.append(results[event])
-        else:
-            new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
+        new_row = [date, tourney_type, selected_tournament]
+        for event in events:
+            if tourney_type == "Class C":
+                new_row.append(results[event])
+            else:
+                new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
-    worksheet.append_row(new_row)
+        worksheet.append_row(new_row)
 
     # Resort by date
     df = pd.DataFrame(worksheet.get_all_records())
