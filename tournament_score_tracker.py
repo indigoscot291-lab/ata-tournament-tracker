@@ -99,28 +99,29 @@ def update_totals(ws, events):
     df = df[df["Date"].notna()]
     df = df.sort_values("Date").reset_index(drop=True)
 
-    # Calculate row totals
-    df["Total"] = df[events].sum(axis=1)
+    # Ensure all event columns are numeric
+    for event in events:
+        df[event] = pd.to_numeric(df[event], errors="coerce").fillna(0)
 
-    # ATA rules
-    aaa = df[df["Type"] == "Class AAA"].nlargest(1, "Total")
-    aa = df[df["Type"] == "Class AA"].nlargest(2, "Total")
-    ab = df[df["Type"].isin(["Class A", "Class B"])].nlargest(5, "Total")
-    c = df[df["Type"] == "Class C"].nlargest(3, "Total")
-
-    counted_df = pd.concat([aaa, aa, ab, c])
-    counted_totals = counted_df[events].sum().tolist()
+    # Calculate per-event totals using ATA rules
+    totals_by_event = []
+    for event in events:
+        aaa = df[df["Type"] == "Class AAA"][event].nlargest(1).sum()
+        aa = df[df["Type"] == "Class AA"][event].nlargest(2).sum()
+        ab = df[df["Type"].isin(["Class A", "Class B"])][event].nlargest(5).sum()
+        c = df[df["Type"] == "Class C"][event].nlargest(3).sum()
+        totals_by_event.append(aaa + aa + ab + c)
 
     # Rebuild sheet
     df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
-    rows = df.drop(columns=["Total"]).fillna("").astype(str).values.tolist()
+    rows = df.fillna("").astype(str).values.tolist()
 
     ws.clear()
-    ws.append_row(df.drop(columns=["Total"]).columns.tolist())
+    ws.append_row(df.columns.tolist())
     ws.append_rows(rows)
 
     # Insert Totals row aligned under event columns (starts at column D)
-    ws.append_row(["Totals", "", ""] + counted_totals)
+    ws.append_row(["Totals", "", ""] + totals_by_event)
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
