@@ -106,11 +106,12 @@ def update_totals(ws, events):
     # Calculate per-event totals using ATA rules
     totals_by_event = []
     for event in events:
-        aaa = df[df["Type"] == "Class AAA"][event].nlargest(1).sum()
-        aa = df[df["Type"] == "Class AA"][event].nlargest(2).sum()
-        ab = df[df["Type"].isin(["Class A", "Class B"])][event].nlargest(5).sum()
-        c = df[df["Type"] == "Class C"][event].nlargest(3).sum()
-        totals_by_event.append(aaa + aa + ab + c)
+        aaa_score = df[df["Type"] == "Class AAA"][event].nlargest(1).sum()
+        aa_score = df[df["Type"] == "Class AA"][event].nlargest(2).sum()
+        ab_score = df[df["Type"].isin(["Class A", "Class B"])][event].nlargest(5).sum()
+        c_score = df[df["Type"] == "Class C"][event].nlargest(3).sum()
+        total = aaa_score + aa_score + ab_score + c_score
+        totals_by_event.append(float(total))  # Ensure native float for JSON serialization
 
     # Rebuild sheet
     df["Date"] = df["Date"].dt.strftime("%m/%d/%Y")
@@ -122,6 +123,7 @@ def update_totals(ws, events):
 
     # Insert Totals row aligned under event columns (starts at column D)
     ws.append_row(["Totals", "", ""] + totals_by_event)
+
 
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
