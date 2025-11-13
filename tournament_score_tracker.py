@@ -45,8 +45,8 @@ if st.session_state.mode == "":
 else:
     st.session_state.mode = st.selectbox(
         "Choose an option:",
-        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"],
-        index=["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"].index(st.session_state.mode),
+        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"],
+        index=["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"].index(st.session_state.mode),
     )
 
 
