@@ -40,7 +40,7 @@ if "mode" not in st.session_state:
 if st.session_state.mode == "":
     st.session_state.mode = st.selectbox(
         "Choose an option:",
-        ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"],
+       ["", "Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"] 
     )
 else:
     st.session_state.mode = st.selectbox(
@@ -287,3 +287,72 @@ elif st.session_state.mode == "Edit Tournament Scores":
         ])
 
         st.success("✅ Changes saved successfully and ATA total updated!")
+
+# ================================
+# MODE 4: VIEW TOURNAMENT RESULTS
+# ================================
+elif st.session_state.mode == "View Tournament Results":
+    st.header("🥋 View Tournament Results")
+
+    # Load completed tournaments
+    tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv&gid=327661053"
+    tournaments = pd.read_csv(tourney_url)
+    tournaments["Date"] = pd.to_datetime(tournaments["Date"], errors="coerce")
+    today = pd.to_datetime(datetime.today().date())
+    completed = tournaments[tournaments["Date"] <= today]
+    tourney_names = completed["Tournament Name"].dropna().unique()
+
+    selected_tourney = st.selectbox("Select a completed tournament:", tourney_names)
+
+    # Choose division
+    division = st.selectbox("Choose division:", [
+        "50–59 1st Degree Black Belt",
+        "40–49 2nd/3rd Degree Black Belt"
+    ])
+
+    # Load results based on division
+    sheet_map = {
+        "50–59 1st Degree Black Belt": "1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg",
+        "40–49 2nd/3rd Degree Black Belt": "1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w"
+    }
+    result_url = f"https://docs.google.com/spreadsheets/d/{sheet_map[division]}/export?format=csv&gid=0"
+    df = pd.read_csv(result_url)
+
+    # Filter by tournament
+    df = df[df["Tournament"] == selected_tourney]
+
+    # Define event columns
+    event_cols = [
+        "Forms", "Weapons", "Combat Weapons", "Sparring",
+        "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
+    ]
+
+    # Clean scores
+    for col in event_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # Initialize placement table
+    placement_table = pd.DataFrame(index=df["Name"].unique(), columns=event_cols)
+
+    # Assign placements per event
+    for event in event_cols:
+        scores = df[["Name", event]].copy()
+        scores = scores.sort_values(event, ascending=False)
+
+        placed = {}
+        for _, row in scores.iterrows():
+            score = row[event]
+            name = row["Name"]
+            if score == 8 and "1st" not in placed.values():
+                placed[name] = "1st"
+            elif score == 5 and "2nd" not in placed.values():
+                placed[name] = "2nd"
+            elif score == 2 and "3rd" not in placed.values():
+                placed[name] = "3rd"
+
+        for name in placement_table.index:
+            placement_table.at[name, event] = placed.get(name, "DNP")
+
+    # Display results
+    st.subheader(f"🏆 Event Placements for {selected_tourney}")
+    st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
