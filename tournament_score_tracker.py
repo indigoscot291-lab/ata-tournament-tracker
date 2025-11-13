@@ -33,10 +33,10 @@ except Exception as e:
 # ======================
 st.title("🏆 ATA Tournament Score Tracker")
 
-st.session_state.mode = st.selectbox(
+# --- Main menu dropdown ---
+mode = st.selectbox(
     "Choose an option:",
-    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"],
-    index=["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"].index(st.session_state.mode),
+    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"]
 )
 
 # --- Get list of existing worksheet names ---
@@ -117,7 +117,7 @@ def update_totals(ws, events):
 # ======================
 # MODE 1: ENTER TOURNAMENT SCORES
 # ======================
-if st.session_state.mode == "Enter Tournament Scores":
+if mode == "Enter Tournament Scores":
     # Create worksheet if missing
     if worksheet is None:
         worksheet = client.open_by_key(SHEET_ID_MAIN).add_worksheet(
@@ -201,7 +201,7 @@ if st.session_state.mode == "Enter Tournament Scores":
 # ======================
 # MODE 2: VIEW RESULTS
 # ======================
-elif st.session_state.mode == "View Tournament Scores":
+elif mode == "View Tournament Scores":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
@@ -233,7 +233,7 @@ elif st.session_state.mode == "View Tournament Scores":
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
-elif st.session_state.mode == "Edit Tournament Scores":
+elif mode == "Edit Tournament Scores":
     if worksheet is None:
         st.info("There are no Tournament Scores for this person.")
         st.stop()
@@ -280,7 +280,7 @@ elif st.session_state.mode == "Edit Tournament Scores":
 # ================================
 # MODE 4: VIEW TOURNAMENT RESULTS
 # ================================
-elif st.session_state.mode == "View Tournament Results":
+elif mode == "View Tournament Results":
     st.header("🥋 View Tournament Results")
     st.write("This mode is active!")  # Add this temporarily to confirm it's working
 
