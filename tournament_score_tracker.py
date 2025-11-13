@@ -293,6 +293,7 @@ elif st.session_state.mode == "Edit Tournament Scores":
 # ================================
 elif st.session_state.mode == "View Tournament Results":
     st.header("🥋 View Tournament Results")
+    st.write("This mode is active!")  # Add this temporarily to confirm it's working
 
     # Load completed tournaments
     tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv&gid=327661053"
