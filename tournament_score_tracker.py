@@ -33,20 +33,11 @@ except Exception as e:
 # ======================
 st.title("🏆 ATA Tournament Score Tracker")
 
-# --- Main menu dropdown ---
 st.session_state.mode = st.selectbox(
     "Choose an option:",
     ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"],
-    key="mode"
+    index=["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"].index(st.session_state.mode),
 )
-
-else:
-    st.session_state.mode = st.selectbox(
-        "Choose an option:",
-        ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"],
-        index=["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"].index(st.session_state.mode),
-    )
-
 
 # --- Get list of existing worksheet names ---
 try:
