@@ -33,15 +33,13 @@ except Exception as e:
 # ======================
 st.title("🏆 ATA Tournament Score Tracker")
 
-# --- Maintain session state for main menu ---
-if "mode" not in st.session_state:
-    st.session_state.mode = ""
+# --- Main menu dropdown ---
+st.session_state.mode = st.selectbox(
+    "Choose an option:",
+    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"],
+    key="mode"
+)
 
-if st.session_state.mode == "":
-    st.session_state.mode = st.selectbox(
-        "Choose an option:",
-       ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"] 
-    )
 else:
     st.session_state.mode = st.selectbox(
         "Choose an option:",
