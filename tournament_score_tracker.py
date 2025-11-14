@@ -283,91 +283,86 @@ elif mode == "Edit Tournament Scores":
 # MODE 4: VIEW TOURNAMENT RESULTS
 # ================================
 elif mode == "View Tournament Results":
-    st.write("✅ View Tournament Results block is active")
+    from datetime import datetime
 
-    try:
-        from datetime import datetime
+    st.subheader("🥋 View Tournament Results")
 
-        # Load tournament metadata
-        tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv&gid=327661053"
-        tournaments_df = pd.read_csv(tourney_url)
-        tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
-        today = pd.to_datetime(datetime.today().date())
+    # Load tournament metadata
+    tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv&gid=327661053"
+    tournaments_df = pd.read_csv(tourney_url)
+    tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
+    today = pd.to_datetime(datetime.today().date())
 
-        # Filter: completed tournaments, not Class C
-        completed = tournaments_df[
-            (tournaments_df["Date"] <= today) &
-            (tournaments_df["Type"] != "Class C")
-        ]
+    # Filter: completed tournaments, not Class C
+    completed = tournaments_df[
+        (tournaments_df["Date"] <= today) &
+        (tournaments_df["Type"] != "Class C")
+    ]
 
-        # Choose division
-        sheet_map = {
-            "50–59 1st Degree Black Belt": "1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg",
-            "40–49 2nd/3rd Degree Black Belt": "1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w"
-        }
-        division = st.selectbox("Choose division:", list(sheet_map.keys()))
-        result_url = f"https://docs.google.com/spreadsheets/d/{sheet_map[division]}/export?format=csv&gid=0"
-        results_df = pd.read_csv(result_url)
+    # Choose division
+    sheet_map = {
+        "50–59 1st Degree Black Belt": "1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg",
+        "40–49 2nd/3rd Degree Black Belt": "1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w"
+    }
+    division = st.selectbox("Choose division:", list(sheet_map.keys()))
+    result_url = f"https://docs.google.com/spreadsheets/d/{sheet_map[division]}/export?format=csv&gid=0"
+    results_df = pd.read_csv(result_url)
 
-        # Filter tournaments that actually have results
-        valid_tourneys = completed[
-            completed["Tournament Name"].isin(results_df["Tournament"].unique())
-        ]["Tournament Name"].dropna().sort_values().unique()
+    # Filter tournaments that actually have results
+    valid_tourneys = completed[
+        completed["Tournament Name"].isin(results_df["Tournament"].unique())
+    ]["Tournament Name"].dropna().sort_values().unique()
 
-        selected_tourney = st.selectbox("Select a completed tournament:", [""] + list(valid_tourneys))
-        if not selected_tourney:
-            st.stop()
+    selected_tourney = st.selectbox("Select a completed tournament:", [""] + list(valid_tourneys))
+    if not selected_tourney:
+        st.stop()
 
-        # Get tournament type
-        tourney_type = completed[completed["Tournament Name"] == selected_tourney]["Type"].iloc[0]
+    # Get tournament type
+    tourney_type = completed[completed["Tournament Name"] == selected_tourney]["Type"].iloc[0]
 
-        # Filter results for selected tournament
-        df = results_df[results_df["Tournament"] == selected_tourney]
+    # Filter results for selected tournament
+    df = results_df[results_df["Tournament"] == selected_tourney]
 
-        # Define event columns
-        event_cols = [
-            "Forms", "Weapons", "Combat Weapons", "Sparring",
-            "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
-        ]
+    # Define event columns
+    event_cols = [
+        "Forms", "Weapons", "Combat Weapons", "Sparring",
+        "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
+    ]
 
-        # Clean scores
-        for col in event_cols:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    # Clean scores
+    for col in event_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-        # Scoring map
-        POINTS_MAP = {
-            "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
-            "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
-            "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
-            "Class B": {"1st": 5, "2nd": 3, "3rd": 1}
-        }
+    # Scoring map
+    POINTS_MAP = {
+        "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+        "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
+        "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
+        "Class B": {"1st": 5, "2nd": 3, "3rd": 1}
+    }
 
-        # Initialize placement table
-        placement_table = pd.DataFrame(index=df["Name"].unique(), columns=event_cols)
+    # Initialize placement table
+    placement_table = pd.DataFrame(index=df["Name"].unique(), columns=event_cols)
 
-        # Assign placements per event
-        for event in event_cols:
-            scores = df[["Name", event]].copy()
-            scores = scores.sort_values(event, ascending=False)
+    # Assign placements per event
+    for event in event_cols:
+        scores = df[["Name", event]].copy()
+        scores = scores.sort_values(event, ascending=False)
 
-            placed = {}
-            for _, row in scores.iterrows():
-                score = row[event]
-                name = row["Name"]
-                if score == POINTS_MAP[tourney_type]["1st"] and "1st" not in placed.values():
-                    placed[name] = "1st"
-                elif score == POINTS_MAP[tourney_type]["2nd"] and "2nd" not in placed.values():
-                    placed[name] = "2nd"
-                elif score == POINTS_MAP[tourney_type]["3rd"] and "3rd" not in placed.values():
-                    placed[name] = "3rd"
+        placed = {}
+        for _, row in scores.iterrows():
+            score = row[event]
+            name = row["Name"]
+            if score == POINTS_MAP[tourney_type]["1st"] and "1st" not in placed.values():
+                placed[name] = "1st"
+            elif score == POINTS_MAP[tourney_type]["2nd"] and "2nd" not in placed.values():
+                placed[name] = "2nd"
+            elif score == POINTS_MAP[tourney_type]["3rd"] and "3rd" not in placed.values():
+                placed[name] = "3rd"
 
-            for name in placement_table.index:
-                placement_table.at[name, event] = placed.get(name, "DNP")
+        for name in placement_table.index:
+            placement_table.at[name, event] = placed.get(name, "DNP")
 
-        # Display results
-        st.subheader(f"🏆 Event Placements for {selected_tourney}")
-        st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
-else:
-    st.error("⚠️ No matching mode block was triggered.")
-st.write("✅ End of script reached")    
-    
+    # Display results
+    st.subheader(f"🏆 Event Placements for {selected_tourney}")
+    st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
