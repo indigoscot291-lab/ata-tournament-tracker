@@ -195,8 +195,8 @@ if mode == "Enter Tournament Scores":
     st.success("✅ Tournament results saved successfully!")
 
     # ✅ Reset mode to return to main menu
-    st.session_state.mode = ""
-    st.session_state.saved = False
+    #st.session_state.mode = ""
+    #st.session_state.saved = False
 
 
 # ======================
