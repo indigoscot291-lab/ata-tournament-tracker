@@ -366,7 +366,7 @@ elif mode == "View Tournament Results":
 
         # Display results
         st.subheader(f"🏆 Event Placements for {selected_tourney}")
-        st.dataframe(placement_table.style.set_properties(**{'
+        st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
 else:
     st.error("⚠️ No matching mode block was triggered.")
 st.write("✅ End of script reached")    
