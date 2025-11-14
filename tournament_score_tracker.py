@@ -344,21 +344,23 @@ elif mode == "View Tournament Results":
     # Initialize placement table
     placement_table = pd.DataFrame(index=df["Name"].unique(), columns=event_cols)
 
-    # Assign placements per event
+    # Assign placements per event (allowing duplicates)
     for event in event_cols:
         scores = df[["Name", event]].copy()
-        scores = scores.sort_values(event, ascending=False)
+        scores[event] = pd.to_numeric(scores[event], errors="coerce").fillna(0)
 
         placed = {}
         for _, row in scores.iterrows():
             score = row[event]
             name = row["Name"]
-            if score == POINTS_MAP[tourney_type]["1st"] and "1st" not in placed.values():
+            if score == POINTS_MAP[tourney_type]["1st"]:
                 placed[name] = "1st"
-            elif score == POINTS_MAP[tourney_type]["2nd"] and "2nd" not in placed.values():
+            elif score == POINTS_MAP[tourney_type]["2nd"]:
                 placed[name] = "2nd"
-            elif score == POINTS_MAP[tourney_type]["3rd"] and "3rd" not in placed.values():
+            elif score == POINTS_MAP[tourney_type]["3rd"]:
                 placed[name] = "3rd"
+            else:
+                placed[name] = "DNP"
 
         for name in placement_table.index:
             placement_table.at[name, event] = placed.get(name, "DNP")
