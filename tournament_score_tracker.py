@@ -38,6 +38,7 @@ mode = st.selectbox(
     "Choose an option:",
     ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"]
 )
+st.write(f"Selected mode: '{mode}'")
 
 # --- Get list of existing worksheet names ---
 try:
