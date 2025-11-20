@@ -384,11 +384,20 @@ elif mode == "View Tournament Results":
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
-    # --- Load competitor sheet (age/rank group) ---
-    comp_url = "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
-    df = pd.read_csv(comp_url)
-    df.columns = df.columns.str.strip()
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    # --- Load both competitor sheets ---
+    comp_urls = [
+        "https://docs.google.com/spreadsheets/d/1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w/export?format=csv",  # 50–59 1st degree women
+        "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"   # 40–49 2nd/3rd degree women
+    ]
+
+    comp_frames = []
+    for url in comp_urls:
+        df_part = pd.read_csv(url)
+        df_part.columns = df_part.columns.str.strip()
+        df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
+        comp_frames.append(df_part)
+
+    df = pd.concat(comp_frames, ignore_index=True)
 
     # --- Load tournament metadata sheet ---
     tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
@@ -414,7 +423,7 @@ elif mode == "Maximum Points Projection (All Events)":
     future_aa = future_tournaments[future_tournaments["TypeNorm"] == "AA"]
     future_ab = future_tournaments[future_tournaments["TypeNorm"].isin(["A", "B"])]
 
-    # --- Choose competitor ---
+    # --- Choose competitor across both sheets ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
     if not competitor:
         st.stop()
@@ -485,4 +494,4 @@ elif mode == "Maximum Points Projection (All Events)":
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
 
-    st.caption("ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. Projection adjusts dynamically as tournaments happen.")
+    st.caption("ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. Projection adjusts dynamically as tournaments happen. Competitors are now selectable across both 50–59 and 40–49 sheets.")
