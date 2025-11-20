@@ -381,6 +381,9 @@ elif mode == "View Tournament Results":
 # ======================
 # MODE 6: MAXIMUM POINTS PROJECTION (ALL EVENTS)
 # ======================
+# ======================
+# MODE 6: MAXIMUM POINTS PROJECTION (ALL EVENTS)
+# ======================
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
@@ -405,23 +408,33 @@ elif mode == "Maximum Points Projection (All Events)":
     tournaments.columns = tournaments.columns.str.strip()
     tournaments["Date"] = pd.to_datetime(tournaments["Date"], errors="coerce")
 
-    # Normalize tournament types
+    # Normalize types (both tournaments and competitor data)
     def norm_type(x):
         s = str(x).strip().lower()
-        if "aaa" in s: return "AAA"
-        if "aa" in s: return "AA"
-        if "class a" in s or s == "a": return "A"
-        if "class b" in s or s == "b": return "B"
-        if "class c" in s or s == "c": return "C"
-        return None
+        if "aaa" in s or s == "aaa": return "AAA"
+        elif ("aa" in s and "aaa" not in s) or s == "aa": return "AA"
+        elif "class a" in s or s == "a" or s == "class a": return "A"
+        elif "class b" in s or s == "b" or s == "class b": return "B"
+        elif "class c" in s or s == "c" or s == "class c": return "C"
+        else: return None
 
     tournaments["TypeNorm"] = tournaments["Type"].apply(norm_type)
-    tournaments["Weekend"] = tournaments["Date"].dt.to_period("W")
+    # Use W-SUN so Fri/Sat are same weekend
+    tournaments["Weekend"] = tournaments["Date"].dt.to_period("W-SUN")
+
+    if "TypeNorm" not in df.columns:
+        if "Type" in df.columns:
+            df["TypeNorm"] = df["Type"].apply(norm_type)
+        else:
+            st.error("Missing 'Type' column in competitor sheets.")
+            st.stop()
 
     today = pd.to_datetime(datetime.today().date())
-    future_tournaments = tournaments[tournaments["Date"] > today]
-    future_aa = future_tournaments[future_tournaments["TypeNorm"] == "AA"]
-    future_ab = future_tournaments[future_tournaments["TypeNorm"].isin(["A", "B"])]
+    season_end = pd.to_datetime("2026-05-31")
+
+    # Only tournaments within the season window
+    future_tournaments = tournaments[(tournaments["Date"] > today) & (tournaments["Date"] <= season_end)].copy()
+    future_tournaments["Weekend"] = future_tournaments["Date"].dt.to_period("W-SUN")
 
     # --- Choose competitor across both sheets ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
@@ -439,43 +452,70 @@ elif mode == "Maximum Points Projection (All Events)":
         "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
     ]
 
-    def calc_event(cdf, event_col):
-        cdf[event_col] = pd.to_numeric(cdf[event_col], errors="coerce").fillna(0)
+    def best5_sum(values):
+        return sum(sorted(values, reverse=True)[:5])
 
-        # AAA current
-        aaa_total = min(cdf.loc[cdf["Type"]=="AAA", event_col].sum(), 20)
+    # Current A/B values by weekend:
+    # - If any A on a weekend, that weekend is 8 (A dominates)
+    # - Else use the best B value recorded for that weekend in the event column
+    def ab_current_values(cdf_event, event_col):
+        ab_df = cdf_event.loc[cdf_event["TypeNorm"].isin(["A", "B"]), ["Date", "TypeNorm", event_col]].copy()
+        if ab_df.empty:
+            return [], set()
+        ab_df["Weekend"] = ab_df["Date"].dt.to_period("W-SUN")
 
-        # AA current
-        aa_scores = cdf.loc[cdf["Type"]=="AA", event_col].sort_values(ascending=False)
+        current_vals = []
+        current_weekends = set()
+        for wk, wk_df in ab_df.groupby("Weekend"):
+            current_weekends.add(wk)
+            if (wk_df["TypeNorm"] == "A").any():
+                current_vals.append(8)
+            else:
+                b_vals = pd.to_numeric(wk_df.loc[wk_df["TypeNorm"] == "B", event_col], errors="coerce").fillna(0)
+                current_vals.append(int(b_vals.max()) if not b_vals.empty else 0)
+        return current_vals, current_weekends
+
+    # Future A/B weekends within season window, excluding already-attended weekends.
+    # If a future weekend has both A and B, count it as A (drop the B for that weekend).
+    def ab_future_weekends(future_df, current_weekends):
+        if future_df.empty:
+            return set(), set()
+        fut_a = set(future_df.loc[future_df["TypeNorm"] == "A", "Weekend"].unique().tolist()) - current_weekends
+        fut_b_all = set(future_df.loc[future_df["TypeNorm"] == "B", "Weekend"].unique().tolist()) - current_weekends
+        fut_b = fut_b_all - fut_a
+        return fut_a, fut_b
+
+    def calc_event(cdf_event, event_col):
+        cdf_event[event_col] = pd.to_numeric(cdf_event[event_col], errors="coerce").fillna(0)
+
+        # AAA current (cap 20)
+        aaa_total = min(cdf_event.loc[cdf_event["TypeNorm"] == "AAA", event_col].sum(), 20)
+
+        # AA current (best 2, cap 30)
+        aa_series = cdf_event.loc[cdf_event["TypeNorm"] == "AA", event_col]
+        aa_scores = aa_series.sort_values(ascending=False)
         current_aa_total = min(aa_scores.head(2).sum(), 30)
-        current_aa_slots = (cdf.loc[cdf["Type"]=="AA", event_col] > 0).sum()
+        current_aa_slots = (aa_series > 0).sum()
 
-        # Remaining AA opportunities
-        remaining_aa_opps = future_aa.shape[0]
+        # Remaining AA opportunities within season window (assume 15 per slot)
+        future_aa = future_tournaments[future_tournaments["TypeNorm"] == "AA"]
+        remaining_aa_opps = future_aa["Weekend"].nunique()
         aa_slots_left = max(0, 2 - current_aa_slots)
         additional_aa = min(aa_slots_left, remaining_aa_opps) * 15
 
-        # A/B current
-        ab_df = cdf.loc[cdf["Type"].isin(["A","B"]), ["Date", event_col]].copy()
-        if not ab_df.empty:
-            ab_df["Weekend"] = ab_df["Date"].dt.to_period("W")
-            best_per_weekend = ab_df.groupby("Weekend")[event_col].max()
-            current_ab_total = min(best_per_weekend.sort_values(ascending=False).head(5).sum(), 40)
-            current_weekends = best_per_weekend.shape[0]
-        else:
-            current_ab_total, current_weekends = 0, 0
+        # A/B current using weekend dominance logic
+        current_ab_values, current_ab_weekends = ab_current_values(cdf_event, event_col)
+        current_ab_total = min(best5_sum(current_ab_values), 40)
 
-        # Remaining A/B weekends
-        rem_weekends = future_ab["Date"].dt.to_period("W").nunique()
+        # A/B future weekends within season window, excluding already attended; A-first, B=5
+        fut_a_wk, fut_b_wk = ab_future_weekends(future_tournaments, current_ab_weekends)
+        future_ab_values = ([8] * len(fut_a_wk)) + ([5] * len(fut_b_wk))
 
-        # Projected A/B = best 5 weekends across past+future, with future weekends assumed 8
-        existing_scores = list(best_per_weekend.values) if current_weekends > 0 else []
-        future_scores = [8] * rem_weekends
-        combined = sorted(existing_scores + future_scores, reverse=True)
-        projected_ab_total = min(sum(combined[:5]), 40)
+        # Projected A/B = best 5 across current + future, cap 40
+        projected_ab_total = min(best5_sum(current_ab_values + future_ab_values), 40)
 
-        # C current
-        c_scores = cdf.loc[cdf["Type"]=="C", event_col].sort_values(ascending=False)
+        # C current (best 3, cap 9)
+        c_scores = cdf_event.loc[cdf_event["TypeNorm"] == "C", event_col].sort_values(ascending=False)
         current_c_total = min(c_scores.head(3).sum(), 9)
 
         current_total = aaa_total + current_aa_total + current_ab_total + current_c_total
@@ -493,14 +533,18 @@ elif mode == "Maximum Points Projection (All Events)":
 
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
-    
-    # ⬇️ Add the debug expander here
-    with st.expander("🔍 Debug: Future A/B tournaments"):
-        st.dataframe(future_ab[["Date","Type","TypeNorm","Tournament Name"]])
-        st.write("Remaining A/B weekends:", future_ab["Date"].dt.to_period("W-SUN").nunique())
-    st.caption(
-        "ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), "
-        "A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. "
-    "⚠️ Note: C points are **not included** in the maximum projection because they are awarded on a per‑school basis."
-)
 
+    # Debug: show future A/B tournaments within season window and weekend counts
+    with st.expander("🔍 Debug: Future A/B tournaments and weekend counts"):
+        show_cols = [c for c in ["Date", "Type", "TypeNorm", "Tournament Name"] if c in future_tournaments.columns]
+        st.dataframe(future_tournaments[show_cols], use_container_width=True)
+        fut_a_weekends = future_tournaments.loc[future_tournaments["TypeNorm"] == "A", "Weekend"].nunique()
+        fut_b_weekends = future_tournaments.loc[future_tournaments["TypeNorm"] == "B", "Weekend"].nunique()
+        st.write("Remaining A weekends:", int(fut_a_weekends))
+        st.write("Remaining B weekends (excluding weekends with A):", int(fut_b_weekends))
+
+    st.caption(
+        "ATA rules: AAA capped at 20; AA best 2 capped at 30; "
+        "A/B combined best 5 weekends capped at 40 (A=8, B=5; Fri/Sat same weekend via W-SUN); "
+        "C best 3 capped at 9. Season cutoff: tournaments after 2026-05-31 are excluded."
+    )
