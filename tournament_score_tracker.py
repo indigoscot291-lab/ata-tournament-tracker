@@ -397,7 +397,7 @@ elif mode == "Maximum Points Projection (All Events)":
         comp_frames.append(df_part)
     df = pd.concat(comp_frames, ignore_index=True)
 
-    # --- Deduplicate competitor rows (avoid double counting across sheets) ---
+    # --- Deduplicate competitor rows ---
     dedupe_keys = [c for c in ["Name","Date","Type","Tournament Name"] if c in df.columns]
     if dedupe_keys:
         df = df.drop_duplicates(subset=dedupe_keys)
@@ -408,14 +408,14 @@ elif mode == "Maximum Points Projection (All Events)":
     tournaments.columns = tournaments.columns.str.strip()
     tournaments["Date"] = pd.to_datetime(tournaments["Date"], errors="coerce")
 
-    # --- Normalize types (explicit elif) ---
+    # --- Normalize types ---
     def norm_type(x):
         s = str(x).strip().lower()
         if "aaa" in s or s == "aaa": return "AAA"
         elif ("aa" in s and "aaa" not in s) or s == "aa": return "AA"
-        elif "class a" in s or s == "a" or s == "class a": return "A"
-        elif "class b" in s or s == "b" or s == "class b": return "B"
-        elif "class c" in s or s == "c" or s == "class c": return "C"
+        elif "class a" in s or s == "a": return "A"
+        elif "class b" in s or s == "b": return "B"
+        elif "class c" in s or s == "c": return "C"
         else: return None
 
     tournaments["TypeNorm"] = tournaments["Type"].apply(norm_type)
@@ -445,7 +445,7 @@ elif mode == "Maximum Points Projection (All Events)":
     def bestN_sum(values, N):
         return sum(sorted(values, reverse=True)[:N])
 
-    # --- Future A/B projection (A-first, B=5, best-5, cap 40) ---
+    # --- Future A/B projection ---
     def future_ab_projection(fut_df: pd.DataFrame) -> int:
         if fut_df.empty:
             return 0
@@ -459,7 +459,7 @@ elif mode == "Maximum Points Projection (All Events)":
                 future_vals.append(5)
         return min(bestN_sum(future_vals, 5), 40)
 
-    # --- Future AA projection: remaining slots to reach best-2 at 15 each (cap 30) ---
+    # --- Future AA projection ---
     def future_aa_projection(fut_df: pd.DataFrame, current_slots_used: int) -> int:
         if fut_df.empty:
             return 0
@@ -468,7 +468,7 @@ elif mode == "Maximum Points Projection (All Events)":
         remaining_weekends = f["WeekendID"].nunique()
         remaining_slots = max(0, 2 - current_slots_used)
         add_slots = min(remaining_slots, remaining_weekends)
-        return min(add_slots * 15, 30)  # per-slot 15, overall AA cap 30
+        return min(add_slots * 15, 30)
 
     # --- Choose competitor ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
@@ -488,11 +488,9 @@ elif mode == "Maximum Points Projection (All Events)":
     def calc_event(cdf_event, event_col):
         cdf_event[event_col] = pd.to_numeric(cdf_event[event_col], errors="coerce").fillna(0)
 
-        # Current totals from sheet (ATA caps)
-        # AAA current (cap 20)
+        # Current totals from sheet
         aaa_current = min(cdf_event.loc[cdf_event["TypeNorm"]=="AAA", event_col].sum(), 20)
 
-        # AA current (best 2 weekends, cap 30)
         aa_df = cdf_event.loc[cdf_event["TypeNorm"]=="AA", ["Date", event_col]].copy()
         if aa_df.empty:
             aa_current = 0
@@ -503,7 +501,6 @@ elif mode == "Maximum Points Projection (All Events)":
             aa_current = min(aa_weekend_max.head(2).sum(), 30)
             aa_slots_used = aa_weekend_max.shape[0]
 
-        # A/B current (best 5 weekends, cap 40) — from sheet only
         ab_df = cdf_event.loc[cdf_event["TypeNorm"].isin(["A","B"]), ["Date", event_col]].copy()
         if ab_df.empty:
             ab_current = 0
@@ -512,21 +509,15 @@ elif mode == "Maximum Points Projection (All Events)":
             ab_weekend_max = ab_df.groupby("WeekendID")[event_col].max()
             ab_current = min(bestN_sum(ab_weekend_max.values, 5), 40)
 
-        # C current (best 3, cap 9)
         c_scores = cdf_event.loc[cdf_event["TypeNorm"]=="C", event_col].sort_values(ascending=False)
         c_current = min(c_scores.head(3).sum(), 9)
 
         current_total = aaa_current + aa_current + ab_current + c_current
 
-        # Projection: ONLY upcoming tournaments (no mixing with current AB)
-        projected_ab = future_ab_projection(
-            future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])]
-        )
-        projected_aa = future_aa_projection(
-            future_tournaments[future_tournaments["TypeNorm"]=="AA"],
-            aa_slots_used
-        )
-        # Total potential for the season = current AAA + current AA + future AA + future AB (+ current C)
+        # Projection: only future tournaments
+        projected_ab = future_ab_projection(future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])])
+        projected_aa = future_aa_projection(future_tournaments[future_tournaments["TypeNorm"]=="AA"], aa_slots_used)
+
         projected_max = aaa_current + aa_current + projected_aa + projected_ab + c_current
 
         return current_total, projected_max
@@ -551,6 +542,4 @@ elif mode == "Maximum Points Projection (All Events)":
         fut_a_count = (wk_class=="A").sum()
         fut_b_count = (wk_class=="B").sum()
         st.write("Remaining A weekends:", int(fut_a_count))
-        st.write("Remaining B weekends:", int(fut_b_count))
-
-    st.caption("Current totals follow ATA caps from the sheets (AAA 20, AA best 2 30, A/B best 5 40, C best 3 9). Projected Max is season potential: current AAA + current AA + future AA (15 per remaining slot, cap 30) + future A/B (A=8, B=5; best 5 capped at 40) + current C. Future weekends are grouped if dates are within 1 day.")
+        st.write("Remaining B weekends:", int
