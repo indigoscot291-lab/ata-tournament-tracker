@@ -384,7 +384,6 @@ elif mode == "View Tournament Results":
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
-    # Choose competitor
     competitor = st.selectbox("Choose competitor:", existing_names)
     if not competitor:
         st.stop()
@@ -401,63 +400,50 @@ elif mode == "Maximum Points Projection (All Events)":
 
     # Normalize headers
     df.columns = df.columns.str.strip()
-
-    # Ensure Date is datetime
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-    # Event columns
+    # ✅ Match your sheet exactly
     event_cols = [
         "Forms", "Weapons", "Combat Weapons", "Sparring",
         "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
     ]
 
     def calculate_event_points(df, event_col):
-        # Split by type
-        aaa_scores = pd.to_numeric(df.loc[df["Type"]=="AAA", event_col], errors="coerce").fillna(0)
-        aa_scores  = pd.to_numeric(df.loc[df["Type"]=="AA", event_col], errors="coerce").fillna(0)
-        ab_df      = df.loc[df["Type"].isin(["A","B"]), ["Date", event_col]].copy()
-        ab_df[event_col] = pd.to_numeric(ab_df[event_col], errors="coerce").fillna(0)
-        c_scores   = pd.to_numeric(df.loc[df["Type"]=="C", event_col], errors="coerce").fillna(0)
+        # Ensure numeric
+        df[event_col] = pd.to_numeric(df[event_col], errors="coerce").fillna(0)
 
         # AAA: cap at 20
+        aaa_scores = df.loc[df["Type"]=="AAA", event_col]
         aaa_total = min(aaa_scores.sum(), 20)
 
         # AA: best 2, cap at 30
-        aa_total = min(sum(sorted(aa_scores, reverse=True)[:2]), 30)
+        aa_scores = df.loc[df["Type"]=="AA", event_col].sort_values(ascending=False)
+        aa_total = min(aa_scores.head(2).sum(), 30)
 
-        # A/B: group by weekend, take max per weekend, best 5, cap at 40
+        # A/B: group by weekend, best per weekend, best 5, cap at 40
+        ab_df = df.loc[df["Type"].isin(["A","B"]), ["Date", event_col]].copy()
         if not ab_df.empty:
             ab_df["Weekend"] = ab_df["Date"].dt.to_period("W")
             ab_best_per_weekend = ab_df.groupby("Weekend")[event_col].max()
-            ab_total = min(sum(sorted(ab_best_per_weekend, reverse=True)[:5]), 40)
+            ab_total = min(ab_best_per_weekend.sort_values(ascending=False).head(5).sum(), 40)
         else:
             ab_total = 0
 
         # C: best 3, cap at 9
-        c_total = min(sum(sorted(c_scores, reverse=True)[:3]), 9)
+        c_scores = df.loc[df["Type"]=="C", event_col].sort_values(ascending=False)
+        c_total = min(c_scores.head(3).sum(), 9)
 
         current_total = aaa_total + aa_total + ab_total + c_total
 
-        # --- Projection logic ---
-        # Keep AAA as is
-        projected_aaa = aaa_total
-
-        # Assume competitor can still earn up to 2 AA at 15 each
-        projected_aa = 30
-
-        # Assume competitor can earn 5×8 from A/B weekends
-        projected_ab = 40
-
-        # Ignore C for projection
-        projected_c = 0
-
-        projected_max = projected_aaa + projected_aa + projected_ab + projected_c
-
+        # --- Projection ---
+        projected_max = aaa_total + 30 + 40  # AAA fixed, AA up to 30, A/B up to 40
         return current_total, projected_max
 
-    # Build projection table
     projection = []
     for event in event_cols:
+        if event not in df.columns:
+            st.warning(f"Column '{event}' not found in sheet")
+            continue
         current_points, projected_max = calculate_event_points(df, event)
         projection.append({
             "Event": event,
