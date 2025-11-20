@@ -372,11 +372,20 @@ elif mode == "View Tournament Results":
 # MODE 6: MAXIMUM POINTS PROJECTION (ALL EVENTS)
 # ======================
 elif mode == "Maximum Points Projection (All Events)":
+    st.subheader("📈 Maximum Points Projection (All Events)")
+
+    # --- Competitor dropdown inside the module ---
+    competitor = st.selectbox("Choose competitor:", existing_names)
+
+    if not competitor:
+        st.stop()
+
+    worksheet = get_user_worksheet(competitor)
     if worksheet is None:
         st.info("No scores available for this competitor yet.")
         st.stop()
 
-    # Load competitor data
+    # --- Load competitor data ---
     data = worksheet.get_all_records()
     if not data:
         st.info("No scores available for this competitor yet.")
@@ -394,8 +403,14 @@ elif mode == "Maximum Points Projection (All Events)":
     tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
     tournaments_df = pd.read_csv(tourney_url)
     tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
+
     today = pd.to_datetime(datetime.today().date())
-    remaining = tournaments_df[tournaments_df["Date"] > today]
+    season_end = pd.to_datetime("2026-05-31")   # ✅ season cutoff
+
+    # Only include tournaments after today and before season cutoff
+    remaining = tournaments_df[
+        (tournaments_df["Date"] > today) & (tournaments_df["Date"] <= season_end)
+    ]
 
     # --- Rule 1: Group A/B tournaments by weekend ---
     remaining_ab = remaining[remaining["Type"].isin(["Class A", "Class B"])].copy()
@@ -426,7 +441,6 @@ elif mode == "Maximum Points Projection (All Events)":
     proj_df = pd.DataFrame(projection)
 
     # --- Display ---
-    st.subheader("📈 Maximum Points Projection (All Events)")
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
 
     st.caption("Note: This projection does not include any future Class C tournaments, as those are school‑based.")
