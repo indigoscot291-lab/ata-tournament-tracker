@@ -463,9 +463,9 @@ elif mode == "Maximum Points Projection (All Events)":
     def future_aa_projection(fut_df: pd.DataFrame, current_slots_used: int) -> int:
         if fut_df.empty:
             return 0
-        f = fut_df.copy()
-        f["WeekendID"] = assign_weekend_ids(f["Date"])
-        remaining_weekends = f["WeekendID"].nunique()
+        fut_df = fut_df.copy()
+        fut_df["WeekendID"] = assign_weekend_ids(fut_df["Date"])
+        remaining_weekends = fut_df["WeekendID"].nunique()
         remaining_slots = max(0, 2 - current_slots_used)
         add_slots = min(remaining_slots, remaining_weekends)
         return min(add_slots * 15, 30)
@@ -488,7 +488,7 @@ elif mode == "Maximum Points Projection (All Events)":
     def calc_event(cdf_event, event_col):
         cdf_event[event_col] = pd.to_numeric(cdf_event[event_col], errors="coerce").fillna(0)
 
-        # Current totals from sheet
+        # Current totals
         aaa_current = min(cdf_event.loc[cdf_event["TypeNorm"]=="AAA", event_col].sum(), 20)
 
         aa_df = cdf_event.loc[cdf_event["TypeNorm"]=="AA", ["Date", event_col]].copy()
