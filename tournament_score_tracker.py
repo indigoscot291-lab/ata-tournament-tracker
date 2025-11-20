@@ -493,10 +493,14 @@ elif mode == "Maximum Points Projection (All Events)":
 
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
-
+    
+    # ⬇️ Add the debug expander here
+    with st.expander("🔍 Debug: Future A/B tournaments"):
+        st.dataframe(future_ab[["Date","Type","TypeNorm","Tournament Name"]])
+        st.write("Remaining A/B weekends:", future_ab["Date"].dt.to_period("W-SUN").nunique())
     st.caption(
-    "ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), "
-    "A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. "
+        "ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), "
+        "A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. "
     "⚠️ Note: C points are **not included** in the maximum projection because they are awarded on a per‑school basis."
 )
 
