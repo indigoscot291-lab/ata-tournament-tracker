@@ -384,25 +384,26 @@ elif mode == "View Tournament Results":
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
-    competitor = st.selectbox("Choose competitor:", existing_names)
-    if not competitor:
-        st.stop()
-
-    worksheet = get_user_worksheet(competitor)
-    if worksheet is None:
-        st.info("No scores available for this competitor yet.")
-        st.stop()
-
-    df = pd.DataFrame(worksheet.get_all_records())
-    if df.empty:
-        st.info("No scores available for this competitor yet.")
-        st.stop()
+    # Directly read from your age/rank group sheet
+    sheet_url = "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
+    df = pd.read_csv(sheet_url)
 
     # Normalize headers
     df.columns = df.columns.str.strip()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
-    # ✅ Match your sheet exactly
+    # Choose competitor
+    competitor = st.selectbox("Choose competitor:", sorted(df["Name"].unique()))
+    if not competitor:
+        st.stop()
+
+    # Filter to this competitor
+    df = df[df["Name"].str.strip().eq(competitor)]
+    if df.empty:
+        st.info("No scores available for this competitor yet.")
+        st.stop()
+
+    # Event columns exactly as in your sheet
     event_cols = [
         "Forms", "Weapons", "Combat Weapons", "Sparring",
         "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
