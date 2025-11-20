@@ -182,7 +182,7 @@ if mode == "Enter Tournament Scores":
             else:
                 new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
-    worksheet.append_row(new_row)
+        worksheet.append_row(new_row)
 
     # Resort by date
     df = pd.DataFrame(worksheet.get_all_records())
