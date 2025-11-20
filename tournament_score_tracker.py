@@ -59,7 +59,7 @@ elif mode in ["View Tournament Scores", "Edit Tournament Scores"]:
 else:
     user_name = ""
 
-if mode != "View Tournament Results" and not user_name:
+if mode not in ["View Tournament Results", "Maximum Points Projection (All Events)"] and not user_name:
     st.stop()
 
 # --- Helper: Get existing worksheet if it exists ---
