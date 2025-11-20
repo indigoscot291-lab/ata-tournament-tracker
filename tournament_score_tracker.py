@@ -542,4 +542,4 @@ elif mode == "Maximum Points Projection (All Events)":
         fut_a_count = (wk_class=="A").sum()
         fut_b_count = (wk_class=="B").sum()
         st.write("Remaining A weekends:", int(fut_a_count))
-        st.write("Remaining B weekends:", int
+        st.write("Remaining B weekends:", int(fut_b_count))
