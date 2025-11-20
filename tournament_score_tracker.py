@@ -37,7 +37,7 @@ st.title("🏆 ATA Tournament Score Tracker")
 # --- Main menu dropdown ---
 mode = st.selectbox(
     "Choose an option:",
-    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results"]
+    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results", "Maximum Points Projection (All Events)"]
 )
 st.write(f"Selected mode: '{mode}'")
 
@@ -368,3 +368,65 @@ elif mode == "View Tournament Results":
     # Display results
     st.subheader(f"🏆 Event Placements for {selected_tourney}")
     st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+# ======================
+# MODE 6: MAXIMUM POINTS PROJECTION (ALL EVENTS)
+# ======================
+elif mode == "Maximum Points Projection (All Events)":
+    if worksheet is None:
+        st.info("No scores available for this competitor yet.")
+        st.stop()
+
+    # Load competitor data
+    data = worksheet.get_all_records()
+    if not data:
+        st.info("No scores available for this competitor yet.")
+        st.stop()
+
+    df = pd.DataFrame(data)
+
+    # --- Define event columns ---
+    event_cols = [
+        "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
+        "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
+    ]
+
+    # --- Load tournament metadata ---
+    tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
+    tournaments_df = pd.read_csv(tourney_url)
+    tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
+    today = pd.to_datetime(datetime.today().date())
+    remaining = tournaments_df[tournaments_df["Date"] > today]
+
+    # --- Rule 1: Group A/B tournaments by weekend ---
+    remaining_ab = remaining[remaining["Type"].isin(["Class A", "Class B"])].copy()
+    remaining_ab["Weekend"] = remaining_ab["Date"].dt.to_period("W")
+    unique_weekends = remaining_ab["Weekend"].nunique()
+
+    # --- Rule 2: Cap A/B contribution at 40 points ---
+    max_ab_tournaments = min(unique_weekends, 5)
+    ab_points = min(max_ab_tournaments * 8, 40)
+
+    # --- Rule 3: AA tournaments (only 2 count) ---
+    remaining_aa = remaining[remaining["Type"] == "Class AA"].shape[0]
+    aa_points = min(remaining_aa, 2) * 15
+
+    # --- Build projection table ---
+    projection = []
+    for event in event_cols:
+        current_points = df[event].sum()
+        projected_max = current_points + ab_points + aa_points
+        projection.append({
+            "Event": event,
+            "Current Points": current_points,
+            "Max A/B Contribution": ab_points,
+            "Max AA Contribution": aa_points,
+            "Projected Max": projected_max
+        })
+
+    proj_df = pd.DataFrame(projection)
+
+    # --- Display ---
+    st.subheader("📈 Maximum Points Projection (All Events)")
+    st.dataframe(proj_df, use_container_width=True, hide_index=True)
+
+    st.caption("Note: This projection does not include any future Class C tournaments, as those are school‑based.")
