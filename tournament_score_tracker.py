@@ -35,31 +35,41 @@ except Exception as e:
 st.title("🏆 ATA Tournament Score Tracker")
 
 # --- Main menu dropdown ---
+# Main menu
 mode = st.selectbox(
     "Choose an option:",
-    ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores", "View Tournament Results", "Maximum Points Projection (All Events)"]
+    [
+        "Enter Tournament Scores",
+        "View Tournament Scores",
+        "Edit Tournament Scores",
+        "View Tournament Results",
+        "Maximum Points Projection (All Events)"
+    ]
 )
-st.write(f"Selected mode: '{mode}'")
 
-# --- Get list of existing worksheet names ---
+# Existing competitors
 try:
     existing_names = [ws.title for ws in client.open_by_key(SHEET_ID_MAIN).worksheets()]
 except Exception:
     existing_names = []
 
-# --- Get user name (different behavior by mode) ---
+# Global competitor selection ONLY for these modes
+user_name = ""
 if mode == "Enter Tournament Scores":
-    user_name_option = st.selectbox("Select existing competitor or add new:", [""] + existing_names + ["Add New Competitor"])
-    if user_name_option == "Add New Competitor" or user_name_option == "":
+    user_name_option = st.selectbox(
+        "Select existing competitor or add new:",
+        [""] + existing_names + ["Add New Competitor"]
+    )
+    if user_name_option in ["", "Add New Competitor"]:
         user_name = st.text_input("Enter new competitor name (First Last):").strip()
     else:
         user_name = user_name_option
+
 elif mode in ["View Tournament Scores", "Edit Tournament Scores"]:
     user_name = st.selectbox("Select Competitor:", [""] + existing_names)
-else:
-    user_name = ""
 
-if mode not in ["View Tournament Results", "Maximum Points Projection (All Events)"] and not user_name:
+# Stop ONLY for modes that rely on the global name
+if mode in ["Enter Tournament Scores", "View Tournament Scores", "Edit Tournament Scores"] and not user_name:
     st.stop()
 
 # --- Helper: Get existing worksheet if it exists ---
@@ -374,9 +384,8 @@ elif mode == "View Tournament Results":
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
-    # --- Competitor dropdown inside the module ---
+    # Competitor chosen inside this module (no global dependency)
     competitor = st.selectbox("Choose competitor:", existing_names)
-
     if not competitor:
         st.stop()
 
@@ -385,7 +394,6 @@ elif mode == "Maximum Points Projection (All Events)":
         st.info("No scores available for this competitor yet.")
         st.stop()
 
-    # --- Load competitor data ---
     data = worksheet.get_all_records()
     if not data:
         st.info("No scores available for this competitor yet.")
@@ -393,39 +401,36 @@ elif mode == "Maximum Points Projection (All Events)":
 
     df = pd.DataFrame(data)
 
-    # --- Define event columns ---
     event_cols = [
         "Traditional Forms", "Traditional Weapons", "Combat Sparring", "Traditional Sparring",
         "Creative Forms", "Creative Weapons", "xTreme Forms", "xTreme Weapons"
     ]
 
-    # --- Load tournament metadata ---
+    # Tournament metadata + season cutoff
     tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
     tournaments_df = pd.read_csv(tourney_url)
     tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
 
     today = pd.to_datetime(datetime.today().date())
-    season_end = pd.to_datetime("2026-05-31")   # ✅ season cutoff
+    season_end = pd.to_datetime("2026-05-31")
 
-    # Only include tournaments after today and before season cutoff
     remaining = tournaments_df[
         (tournaments_df["Date"] > today) & (tournaments_df["Date"] <= season_end)
     ]
 
-    # --- Rule 1: Group A/B tournaments by weekend ---
+    # A/B weekends logic
     remaining_ab = remaining[remaining["Type"].isin(["Class A", "Class B"])].copy()
     remaining_ab["Weekend"] = remaining_ab["Date"].dt.to_period("W")
     unique_weekends = remaining_ab["Weekend"].nunique()
 
-    # --- Rule 2: Cap A/B contribution at 40 points ---
     max_ab_tournaments = min(unique_weekends, 5)
     ab_points = min(max_ab_tournaments * 8, 40)
 
-    # --- Rule 3: AA tournaments (only 2 count) ---
+    # AA limit
     remaining_aa = remaining[remaining["Type"] == "Class AA"].shape[0]
     aa_points = min(remaining_aa, 2) * 15
 
-    # --- Build projection table ---
+    # Build table
     projection = []
     for event in event_cols:
         current_points = df[event].sum()
@@ -439,8 +444,5 @@ elif mode == "Maximum Points Projection (All Events)":
         })
 
     proj_df = pd.DataFrame(projection)
-
-    # --- Display ---
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
-
-    st.caption("Note: This projection does not include any future Class C tournaments, as those are school‑based.")
+    st.caption("Note: Projection excludes future Class C tournaments, which are school-based.")
