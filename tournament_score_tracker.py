@@ -385,28 +385,42 @@ elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
 
     # --- Load competitor sheet (age/rank group) ---
-    competitor_url = "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
-    df = pd.read_csv(competitor_url)
+    comp_url = "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
+    df = pd.read_csv(comp_url)
     df.columns = df.columns.str.strip()
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
 
     # --- Load tournament metadata sheet ---
     tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
-    tournaments_df = pd.read_csv(tourney_url)
-    tournaments_df.columns = tournaments_df.columns.str.strip()
-    tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
+    tournaments = pd.read_csv(tourney_url)
+    tournaments.columns = tournaments.columns.str.strip()
+    tournaments["Date"] = pd.to_datetime(tournaments["Date"], errors="coerce")
+
+    # Normalize tournament types
+    def norm_type(x):
+        s = str(x).strip().lower()
+        if "aaa" in s: return "AAA"
+        if "aa" in s: return "AA"
+        if "class a" in s or s == "a": return "A"
+        if "class b" in s or s == "b": return "B"
+        if "class c" in s or s == "c": return "C"
+        return None
+
+    tournaments["TypeNorm"] = tournaments["Type"].apply(norm_type)
+    tournaments["Weekend"] = tournaments["Date"].dt.to_period("W")
 
     today = pd.to_datetime(datetime.today().date())
-    past_tournaments = tournaments_df[tournaments_df["Date"] <= today]
-    future_tournaments = tournaments_df[tournaments_df["Date"] > today]
+    future_tournaments = tournaments[tournaments["Date"] > today]
+    future_aa = future_tournaments[future_tournaments["TypeNorm"] == "AA"]
+    future_ab = future_tournaments[future_tournaments["TypeNorm"].isin(["A", "B"])]
 
     # --- Choose competitor ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
     if not competitor:
         st.stop()
 
-    df = df[df["Name"].str.strip().eq(competitor)]
-    if df.empty:
+    cdf = df[df["Name"].str.strip().eq(competitor)].copy()
+    if cdf.empty:
         st.info("No scores available for this competitor yet.")
         st.stop()
 
@@ -416,61 +430,59 @@ elif mode == "Maximum Points Projection (All Events)":
         "Creative Forms", "Creative Weapons", "X-Treme Forms", "X-Treme Weapons"
     ]
 
-    def calculate_event_points(df, event_col):
-        df[event_col] = pd.to_numeric(df[event_col], errors="coerce").fillna(0)
+    def calc_event(cdf, event_col):
+        cdf[event_col] = pd.to_numeric(cdf[event_col], errors="coerce").fillna(0)
 
         # AAA current
-        aaa_total = min(df.loc[df["Type"]=="AAA", event_col].sum(), 20)
+        aaa_total = min(cdf.loc[cdf["Type"]=="AAA", event_col].sum(), 20)
 
         # AA current
-        aa_scores = df.loc[df["Type"]=="AA", event_col].sort_values(ascending=False)
+        aa_scores = cdf.loc[cdf["Type"]=="AA", event_col].sort_values(ascending=False)
         current_aa_total = min(aa_scores.head(2).sum(), 30)
-        current_aa_count = (df.loc[df["Type"]=="AA", event_col] > 0).sum()
+        current_aa_slots = (cdf.loc[cdf["Type"]=="AA", event_col] > 0).sum()
 
         # Remaining AA opportunities
-        remaining_aa = future_tournaments[future_tournaments["Type"]=="AA"].shape[0]
-        aa_slots_left = max(0, 2 - current_aa_count)
-        additional_aa = min(aa_slots_left, remaining_aa) * 15
+        remaining_aa_opps = future_aa.shape[0]
+        aa_slots_left = max(0, 2 - current_aa_slots)
+        additional_aa = min(aa_slots_left, remaining_aa_opps) * 15
 
         # A/B current
-        ab_df = df.loc[df["Type"].isin(["A","B"]), ["Date", event_col]].copy()
+        ab_df = cdf.loc[cdf["Type"].isin(["A","B"]), ["Date", event_col]].copy()
         if not ab_df.empty:
             ab_df["Weekend"] = ab_df["Date"].dt.to_period("W")
-            ab_best_per_weekend = ab_df.groupby("Weekend")[event_col].max()
-            current_ab_total = min(ab_best_per_weekend.sort_values(ascending=False).head(5).sum(), 40)
-            current_weekends = ab_best_per_weekend.shape[0]
+            best_per_weekend = ab_df.groupby("Weekend")[event_col].max()
+            current_ab_total = min(best_per_weekend.sort_values(ascending=False).head(5).sum(), 40)
+            current_weekends = best_per_weekend.shape[0]
         else:
-            current_ab_total = 0
-            current_weekends = 0
+            current_ab_total, current_weekends = 0, 0
 
         # Remaining A/B weekends
-        future_ab = future_tournaments[future_tournaments["Type"].isin(["A","B"])]
-        remaining_weekends = future_ab["Date"].dt.to_period("W").nunique()
+        rem_weekends = future_ab["Date"].dt.to_period("W").nunique()
 
-        projected_ab = min(5, current_weekends + remaining_weekends) * 8
+        # Projected A/B = best 5 weekends across past+future, with future weekends assumed 8
+        existing_scores = list(best_per_weekend.values) if current_weekends > 0 else []
+        future_scores = [8] * rem_weekends
+        combined = sorted(existing_scores + future_scores, reverse=True)
+        projected_ab_total = min(sum(combined[:5]), 40)
 
         # C current
-        c_scores = df.loc[df["Type"]=="C", event_col].sort_values(ascending=False)
+        c_scores = cdf.loc[cdf["Type"]=="C", event_col].sort_values(ascending=False)
         current_c_total = min(c_scores.head(3).sum(), 9)
 
         current_total = aaa_total + current_aa_total + current_ab_total + current_c_total
-        projected_max = aaa_total + current_aa_total + additional_aa + projected_ab
+        projected_max = aaa_total + current_aa_total + additional_aa + projected_ab_total
 
         return current_total, projected_max
 
     projection = []
     for event in event_cols:
-        if event not in df.columns:
+        if event not in cdf.columns:
             st.warning(f"Column '{event}' not found in sheet")
             continue
-        current_points, projected_max = calculate_event_points(df, event)
-        projection.append({
-            "Event": event,
-            "Current Points": current_points,
-            "Projected Max": projected_max
-        })
+        cur, proj = calc_event(cdf.copy(), event)
+        projection.append({"Event": event, "Current Points": cur, "Projected Max": proj})
 
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
 
-    st.caption("ATA rules applied dynamically: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), A/B best 5 weekends capped at 40 (only remaining weekends count), C best 3 capped at 9. Projection adjusts as tournaments happen.")
+    st.caption("ATA rules applied: AAA capped at 20, AA best 2 capped at 30 (only remaining AA tournaments count), A/B best 5 weekends capped at 40 (future weekends assumed 8), C best 3 capped at 9. Projection adjusts dynamically as tournaments happen.")
