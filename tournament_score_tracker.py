@@ -445,30 +445,30 @@ elif mode == "Maximum Points Projection (All Events)":
     def bestN_sum(values, N):
         return sum(sorted(values, reverse=True)[:N])
 
-    # --- Future A/B projection ---
-    def future_ab_projection(fut_df: pd.DataFrame) -> int:
+    # --- A/B: build future weekend values (A-first=8, else B=5) ---
+    def future_ab_weekend_values(fut_df: pd.DataFrame) -> list:
+        if fut_df.empty:
+            return []
+        f = fut_df.copy()
+        f["WeekendID"] = assign_weekend_ids(f["Date"])
+        vals = []
+        for _, wk_df in f.groupby("WeekendID"):
+            if (wk_df["TypeNorm"] == "A").any():
+                vals.append(8)
+            elif (wk_df["TypeNorm"] == "B").any():
+                vals.append(5)
+        return vals
+
+    # --- AA projection: 15 per remaining slot, only if actual future AA weekends exist ---
+    def future_aa_projection(fut_df: pd.DataFrame, current_slots_used: int) -> int:
         if fut_df.empty:
             return 0
         f = fut_df.copy()
         f["WeekendID"] = assign_weekend_ids(f["Date"])
-        future_vals = []
-        for _, wk_df in f.groupby("WeekendID"):
-            if (wk_df["TypeNorm"] == "A").any():
-                future_vals.append(8)
-            elif (wk_df["TypeNorm"] == "B").any():
-                future_vals.append(5)
-        return min(bestN_sum(future_vals, 5), 40)
-
-    # --- Future AA projection ---
-    def future_aa_projection(fut_df: pd.DataFrame, current_slots_used: int) -> int:
-        if fut_df.empty:
-            return 0
-        fut_df = fut_df.copy()
-        fut_df["WeekendID"] = assign_weekend_ids(fut_df["Date"])
-        remaining_weekends = fut_df["WeekendID"].nunique()
+        remaining_weekends = f["WeekendID"].nunique()
         remaining_slots = max(0, 2 - current_slots_used)
         add_slots = min(remaining_slots, remaining_weekends)
-        return add_slots * 15  # only add if actual weekends exist
+        return add_slots * 15
 
     # --- Choose competitor ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
@@ -503,26 +503,39 @@ elif mode == "Maximum Points Projection (All Events)":
 
         ab_df = cdf_event.loc[cdf_event["TypeNorm"].isin(["A","B"]), ["Date", event_col]].copy()
         if ab_df.empty:
-            ab_current = 0
+            ab_current_weekend_vals = []
+            ab_current_total = 0
         else:
             ab_df["WeekendID"] = assign_weekend_ids(ab_df["Date"])
+            # current best value per weekend in this event
             ab_weekend_max = ab_df.groupby("WeekendID")[event_col].max()
-            ab_current = min(bestN_sum(ab_weekend_max.values, 5), 40)
+            ab_current_weekend_vals = list(ab_weekend_max.values)
+            ab_current_total = min(bestN_sum(ab_weekend_max.values, 5), 40)
 
         c_scores = cdf_event.loc[cdf_event["TypeNorm"]=="C", event_col].sort_values(ascending=False)
         c_current = min(c_scores.head(3).sum(), 9)
 
-        current_total = aaa_current + aa_current + ab_current + c_current
+        current_total = aaa_current + aa_current + ab_current_total + c_current
 
         # If no future tournaments at all, projected max = current
         if future_tournaments.empty:
             return current_total, current_total
 
-        # Projection: only future tournaments
-        projected_ab = future_ab_projection(future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])])
-        projected_aa = future_aa_projection(future_tournaments[future_tournaments["TypeNorm"]=="AA"], aa_slots_used)
+        # Projection:
+        # - AA: add 15 per remaining slot only if future AA weekends exist
+        projected_aa = future_aa_projection(
+            future_tournaments[future_tournaments["TypeNorm"]=="AA"],
+            aa_slots_used
+        )
 
-        projected_max = aaa_current + aa_current + projected_aa + projected_ab + c_current
+        # - A/B: recompute best-5 over union of current weekend values and future weekend values
+        future_ab_vals = future_ab_weekend_values(
+            future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])]
+        )
+        # union current + future, then best-5 capped at 40
+        combined_ab_best5 = min(bestN_sum(ab_current_weekend_vals + future_ab_vals, 5), 40)
+
+        projected_max = aaa_current + aa_current + projected_aa + combined_ab_best5 + c_current
 
         return current_total, projected_max
 
@@ -537,15 +550,12 @@ elif mode == "Maximum Points Projection (All Events)":
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
 
-    with st.expander("🔍 Debug: Future A/B tournaments"):
+    with st.expander("🔍 Debug: Future weekends and grouping"):
         show_cols = [c for c in ["Date","Type","TypeNorm","Tournament Name"] if c in future_tournaments.columns]
         st.dataframe(future_tournaments[show_cols], use_container_width=True)
-        f_ab = future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])].copy()
-        f_ab["WeekendID"] = assign_weekend_ids(f_ab["Date"])
-        wk_class = f_ab.groupby("WeekendID")["TypeNorm"].apply(lambda s: "A" if (s=="A").any() else "B")
-        fut_a_count = (wk_class=="A").sum()
-        fut_b_count = (wk_class=="B").sum()
-        st.write("Remaining A weekends:", int(fut_a_count))
-        st.write("Remaining B weekends:", int(fut_b_count))
+        f = future_tournaments.copy()
+        f["WeekendID"] = assign_weekend_ids(f["Date"])
+        wk_summary = f.groupby("WeekendID")["TypeNorm"].apply(lambda s: "A" if (s=="A").any() else ("B" if (s=="B").any() else ""))
+        st.write("Future weekend classes:", wk_summary.to_dict())
 
-    st.caption("Current totals follow ATA caps from the sheets (AAA 20, AA best 2 30, A/B best 5 40, C best 3 9). Projected Max is based only on actual future tournaments through 2026-05-31. If no future tournaments exist, Projected Max = Current.")
+    st.caption("Current totals follow ATA caps from the sheets (AAA 20, AA best 2 30, A/B best 5 40, C best 3 9). Projected Max uses actual future weekends: AA adds 15 per remaining slot only if future AA weekends exist; A/B recomputes best-5 using current + future weekend values (A=8, B=5), grouped by 'within 1 day = same weekend'.")
