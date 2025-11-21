@@ -468,7 +468,7 @@ elif mode == "Maximum Points Projection (All Events)":
         remaining_weekends = fut_df["WeekendID"].nunique()
         remaining_slots = max(0, 2 - current_slots_used)
         add_slots = min(remaining_slots, remaining_weekends)
-        return min(add_slots * 15, 30)
+        return add_slots * 15  # only add if actual weekends exist
 
     # --- Choose competitor ---
     competitor = st.selectbox("Choose competitor:", sorted(df["Name"].dropna().unique()))
@@ -514,6 +514,10 @@ elif mode == "Maximum Points Projection (All Events)":
 
         current_total = aaa_current + aa_current + ab_current + c_current
 
+        # If no future tournaments at all, projected max = current
+        if future_tournaments.empty:
+            return current_total, current_total
+
         # Projection: only future tournaments
         projected_ab = future_ab_projection(future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])])
         projected_aa = future_aa_projection(future_tournaments[future_tournaments["TypeNorm"]=="AA"], aa_slots_used)
@@ -543,3 +547,5 @@ elif mode == "Maximum Points Projection (All Events)":
         fut_b_count = (wk_class=="B").sum()
         st.write("Remaining A weekends:", int(fut_a_count))
         st.write("Remaining B weekends:", int(fut_b_count))
+
+    st.caption("Current totals follow ATA caps from the sheets (AAA 20, AA best 2 30, A/B best 5 40, C best 3 9). Projected Max is based only on actual future tournaments through 2026-05-31. If no future tournaments exist, Projected Max = Current.")
