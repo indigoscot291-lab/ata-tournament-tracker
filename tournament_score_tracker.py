@@ -433,6 +433,26 @@ elif mode == "Maximum Points Projection (All Events)":
     season_end = pd.to_datetime("2026-05-31")
     future_tournaments = tournaments[(tournaments["Date"] > today) & (tournaments["Date"] <= season_end)].copy()
 
+    # --- NEW: let user choose which future tournaments to include ---
+    selection_mode = st.radio(
+        "Which future tournaments should be used in the projection?",
+        ["All Future Tournaments", "Select Specific Tournaments"]
+    )
+
+    if selection_mode == "All Future Tournaments":
+        chosen_future_tournaments = future_tournaments
+    elif selection_mode == "Select Specific Tournaments":
+        chosen_names = st.multiselect(
+            "Pick tournaments you plan to attend:",
+            options=future_tournaments["Tournament Name"].tolist()
+        )
+        if not chosen_names:
+            st.warning("⚠️ You must select at least one future tournament to continue.")
+            st.stop()
+        chosen_future_tournaments = future_tournaments[
+            future_tournaments["Tournament Name"].isin(chosen_names)
+        ]
+
     # --- Weekend grouping: dates within 1 day = same weekend ---
     def assign_weekend_ids(dates: pd.Series) -> pd.Series:
         s = pd.to_datetime(dates, errors="coerce").dropna().dt.normalize().sort_values().unique()
@@ -513,14 +533,14 @@ elif mode == "Maximum Points Projection (All Events)":
         aa_df = cdf_event.loc[cdf_event["TypeNorm"]=="AA", ["Date", event_col]].copy()
         aa_current_vals = aa_current_weekend_values(aa_df, event_col)
         aa_current = min(sum(sorted(aa_current_vals, reverse=True)[:2]), 30)
-        future_aa_vals = future_aa_weekend_values(future_tournaments[future_tournaments["TypeNorm"]=="AA"])
+        future_aa_vals = future_aa_weekend_values(chosen_future_tournaments[chosen_future_tournaments["TypeNorm"]=="AA"])
         aa_projected_best2 = min(sum(sorted(aa_current_vals + future_aa_vals, reverse=True)[:2]), 30)
 
         # A/B current + projection
         ab_df = cdf_event.loc[cdf_event["TypeNorm"].isin(["A","B"]), ["Date", event_col]].copy()
         ab_current_vals = ab_current_weekend_values(ab_df, event_col)
         ab_current_total = min(bestN_sum(ab_current_vals, 5), 40)
-        future_ab_vals = future_ab_weekend_values(future_tournaments[future_tournaments["TypeNorm"].isin(["A","B"])])
+        future_ab_vals = future_ab_weekend_values(chosen_future_tournaments[chosen_future_tournaments["TypeNorm"].isin(["A","B"])])
         ab_projected_best5 = min(bestN_sum(ab_current_vals + future_ab_vals, 5), 40)
 
         # C current
