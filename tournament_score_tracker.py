@@ -178,11 +178,11 @@ if mode == "Enter Tournament Scores":
             results[event] = st.selectbox(f"{event} (Place)", places, key=event)
 
     if st.button("💾 Save Results"):
-    POINTS_MAP = {
-        "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
-        "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
-        "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
-        "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
+        POINTS_MAP = {
+            "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
+            "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
+            "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
+            "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
     }
 
     new_row = [date, tourney_type, selected_tournament]
