@@ -35,7 +35,6 @@ except Exception as e:
 st.title("🏆 ATA Tournament Score Tracker")
 
 # --- Main menu dropdown ---
-# Main menu
 mode = st.selectbox(
     "Choose an option:",
     [
@@ -109,9 +108,10 @@ def update_totals(ws, events):
     for event in events:
         aaa_score = df[df["Type"] == "Class AAA"][event].nlargest(1).sum()
         aa_score = df[df["Type"] == "Class AA"][event].nlargest(2).sum()
+        a_plus_score = df[df["Type"] == "Class A+"][event].nlargest(2).sum()
         ab_score = df[df["Type"].isin(["Class A", "Class B"])][event].nlargest(5).sum()
         c_score = df[df["Type"] == "Class C"][event].nlargest(3).sum()
-        total = aaa_score + aa_score + ab_score + c_score
+        total = aaa_score + aa_score + a_plus_score + ab_score + c_score
         totals_by_event.append(float(total))  # Ensure native float for JSON serialization
 
     # Rebuild sheet
@@ -179,42 +179,41 @@ if mode == "Enter Tournament Scores":
 
     if st.button("💾 Save Results"):
         POINTS_MAP = {
+            "Class A+": {"1st": 12, "2nd": 8, "3rd": 4},
             "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
             "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
             "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
             "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
-    }
+        }
 
-    new_row = [date, tourney_type, selected_tournament]
-    for event in events:
-        if tourney_type == "Class C":
-            new_row.append(results[event])
-        else:
-            new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
+        new_row = [date, tourney_type, selected_tournament]
+        for event in events:
+            if tourney_type == "Class C":
+                new_row.append(results[event])
+            else:
+                new_row.append(POINTS_MAP.get(tourney_type, {}).get(results[event], 0))
 
-    # ✅ Instead of relying on get_all_records immediately,
-    # build df including the new row before clearing
-    df = pd.DataFrame(worksheet.get_all_records())
+        # Build df including the new row before clearing
+        df = pd.DataFrame(worksheet.get_all_records())
 
-    # If sheet was empty, initialize with headers
-    if df.empty:
-        df = pd.DataFrame(columns=["Date", "Type", "Tournament Name"] + events)
+        # If sheet was empty, initialize with headers
+        if df.empty:
+            df = pd.DataFrame(columns=["Date", "Type", "Tournament Name"] + events)
 
-    # Append the new row directly to df
-    df.loc[len(df)] = new_row
+        # Append the new row directly to df
+        df.loc[len(df)] = new_row
 
-    # Resort by Date
-    if "Date" in df.columns:
-        df = df.sort_values("Date").reset_index(drop=True)
+        # Resort by Date
+        if "Date" in df.columns:
+            df = df.sort_values("Date").reset_index(drop=True)
 
-    # Rewrite sheet safely
-    worksheet.clear()
-    worksheet.append_row(df.columns.tolist())
-    worksheet.append_rows(df.values.tolist())
+        # Rewrite sheet safely
+        worksheet.clear()
+        worksheet.append_row(df.columns.tolist())
+        worksheet.append_rows(df.values.tolist())
 
-    update_totals(worksheet, events)
-    st.success("✅ Tournament results saved successfully!")
-
+        update_totals(worksheet, events)
+        st.success("✅ Tournament results saved successfully!")
 
 
 # ======================
@@ -249,6 +248,7 @@ elif mode == "View Tournament Scores":
         )
 
         st.dataframe(df, use_container_width=True, hide_index=True)
+
 # ======================
 # MODE 3: EDIT RESULTS
 # ======================
@@ -350,12 +350,13 @@ elif mode == "View Tournament Results":
     for col in event_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # Scoring map
+    # Scoring map (per event, per place)
     POINTS_MAP = {
         "Class AAA": {"1st": 20, "2nd": 15, "3rd": 10},
         "Class AA": {"1st": 15, "2nd": 10, "3rd": 8},
+        "Class A+": {"1st": 12, "2nd": 8, "3rd": 4},
         "Class A": {"1st": 8, "2nd": 5, "3rd": 2},
-        "Class B": {"1st": 5, "2nd": 3, "3rd": 1}
+        "Class B": {"1st": 5, "2nd": 3, "3rd": 1},
     }
 
     # Initialize placement table
@@ -370,11 +371,12 @@ elif mode == "View Tournament Results":
         for _, row in scores.iterrows():
             score = row[event]
             name = row["Name"]
-            if score == POINTS_MAP[tourney_type]["1st"]:
+            pm = POINTS_MAP.get(tourney_type, {})
+            if score == pm.get("1st", -1):
                 placed[name] = "1st"
-            elif score == POINTS_MAP[tourney_type]["2nd"]:
+            elif score == pm.get("2nd", -1):
                 placed[name] = "2nd"
-            elif score == POINTS_MAP[tourney_type]["3rd"]:
+            elif score == pm.get("3rd", -1):
                 placed[name] = "3rd"
             else:
                 placed[name] = "DNP"
@@ -385,8 +387,9 @@ elif mode == "View Tournament Results":
     # Display results
     st.subheader(f"🏆 Event Placements for {selected_tourney}")
     st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
+
 # ======================
-# MODE 6: MAXIMUM POINTS PROJECTION (ALL EVENTS)
+# MODE 5: MAXIMUM POINTS PROJECTION (ALL EVENTS)
 # ======================
 elif mode == "Maximum Points Projection (All Events)":
     st.subheader("📈 Maximum Points Projection (All Events)")
@@ -418,12 +421,20 @@ elif mode == "Maximum Points Projection (All Events)":
     # --- Normalize types ---
     def norm_type(x):
         s = str(x).strip().lower()
-        if "aaa" in s or s == "aaa": return "AAA"
-        elif ("aa" in s and "aaa" not in s) or s == "aa": return "AA"
-        elif "class a" in s or s == "a": return "A"
-        elif "class b" in s or s == "b": return "B"
-        elif "class c" in s or s == "c": return "C"
-        else: return None
+        if "aaa" in s or s == "aaa":
+            return "AAA"
+        elif ("aa" in s and "aaa" not in s) or s == "aa":
+            return "AA"
+        elif "a+" in s or "class a+" in s:
+            return "A+"
+        elif "class a" in s or s == "a":
+            return "A"
+        elif "class b" in s or s == "b":
+            return "B"
+        elif "class c" in s or s == "c":
+            return "C"
+        else:
+            return None
 
     tournaments["TypeNorm"] = tournaments["Type"].apply(norm_type)
     if "TypeNorm" not in df.columns and "Type" in df.columns:
@@ -487,6 +498,22 @@ elif mode == "Maximum Points Projection (All Events)":
         f["WeekendID"] = assign_weekend_ids(f["Date"])
         return [15] * f["WeekendID"].nunique()
 
+    # --- A+ helpers ---
+    def aplus_current_weekend_values(ap_df: pd.DataFrame, event_col: str) -> list:
+        if ap_df.empty:
+            return []
+        ap_df = ap_df.copy()
+        ap_df["WeekendID"] = assign_weekend_ids(ap_df["Date"])
+        return list(ap_df.groupby("WeekendID")[event_col].max().values)
+
+    def future_aplus_weekend_values(fut_df: pd.DataFrame) -> list:
+        if fut_df.empty:
+            return []
+        f = fut_df.copy()
+        f["WeekendID"] = assign_weekend_ids(f["Date"])
+        # A+ gives 12 points for 1st → assume max for projection
+        return [12] * f["WeekendID"].nunique()
+
     # --- A/B helpers ---
     def ab_current_weekend_values(ab_df: pd.DataFrame, event_col: str) -> list:
         if ab_df.empty:
@@ -533,22 +560,48 @@ elif mode == "Maximum Points Projection (All Events)":
         aa_df = cdf_event.loc[cdf_event["TypeNorm"]=="AA", ["Date", event_col]].copy()
         aa_current_vals = aa_current_weekend_values(aa_df, event_col)
         aa_current = min(sum(sorted(aa_current_vals, reverse=True)[:2]), 30)
-        future_aa_vals = future_aa_weekend_values(chosen_future_tournaments[chosen_future_tournaments["TypeNorm"]=="AA"])
+        future_aa_vals = future_aa_weekend_values(
+            chosen_future_tournaments[chosen_future_tournaments["TypeNorm"]=="AA"]
+        )
         aa_projected_best2 = min(sum(sorted(aa_current_vals + future_aa_vals, reverse=True)[:2]), 30)
+
+        # A+ current + projection (best 2)
+        ap_df = cdf_event.loc[cdf_event["TypeNorm"]=="A+", ["Date", event_col]].copy()
+        ap_current_vals = aplus_current_weekend_values(ap_df, event_col)
+        ap_current = min(sum(sorted(ap_current_vals, reverse=True)[:2]), 24)
+        future_ap_vals = future_aplus_weekend_values(
+            chosen_future_tournaments[chosen_future_tournaments["TypeNorm"]=="A+"]
+        )
+        ap_projected_best2 = min(sum(sorted(ap_current_vals + future_ap_vals, reverse=True)[:2]), 24)
 
         # A/B current + projection
         ab_df = cdf_event.loc[cdf_event["TypeNorm"].isin(["A","B"]), ["Date", event_col]].copy()
         ab_current_vals = ab_current_weekend_values(ab_df, event_col)
         ab_current_total = min(bestN_sum(ab_current_vals, 5), 40)
-        future_ab_vals = future_ab_weekend_values(chosen_future_tournaments[chosen_future_tournaments["TypeNorm"].isin(["A","B"])])
+        future_ab_vals = future_ab_weekend_values(
+            chosen_future_tournaments[chosen_future_tournaments["TypeNorm"].isin(["A","B"])]
+        )
         ab_projected_best5 = min(bestN_sum(ab_current_vals + future_ab_vals, 5), 40)
 
         # C current
         c_scores = cdf_event.loc[cdf_event["TypeNorm"]=="C", event_col].sort_values(ascending=False)
         c_current = min(c_scores.head(3).sum(), 9)
 
-        current_total = aaa_current + aa_current + ab_current_total + c_current
-        projected_max = aaa_current + aa_projected_best2 + ab_projected_best5 + c_current
+        current_total = (
+            aaa_current +
+            aa_current +
+            ap_current +
+            ab_current_total +
+            c_current
+        )
+
+        projected_max = (
+            aaa_current +
+            aa_projected_best2 +
+            ap_projected_best2 +
+            ab_projected_best5 +
+            c_current
+        )
 
         return current_total, projected_max
 
@@ -563,4 +616,9 @@ elif mode == "Maximum Points Projection (All Events)":
     proj_df = pd.DataFrame(projection)
     st.dataframe(proj_df, use_container_width=True, hide_index=True)
 
-    st.caption("Current totals follow ATA caps (AAA 20, AA best 2 30, A/B best 5 40, C best 3 9). Projected Max recomputes AA best 2 using current + future AA weekends (15 each) and A/B best 5 using current + future weekends (A=8, B=5).")
+    st.caption(
+        "Current totals follow ATA caps (AAA 20, AA best 2 30, A+ best 2 24, "
+        "A/B best 5 40, C best 3 9). Projected Max recomputes AA and A+ best 2 "
+        "using current + future weekends (AA=15, A+=12) and A/B best 5 using "
+        "current + future weekends (A=8, B=5)."
+    )
