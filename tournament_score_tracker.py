@@ -389,7 +389,6 @@ elif mode == "View Tournament Results":
     # Display results
     st.subheader(f"🏆 Event Placements for {selected_tourney}")
     st.dataframe(placement_table.style.set_properties(**{'text-align': 'left'}), use_container_width=True)
-
 # ======================
 # MODE 5: MAXIMUM POINTS PROJECTION (ALL EVENTS)
 # ======================
@@ -401,15 +400,27 @@ elif mode == "Maximum Points Projection (All Events)":
         "https://docs.google.com/spreadsheets/d/13xCSyusv7TB0FYV1VOeHynsL5n7gPtCn6QKCNCxD4lc/edit?gid=0#gid=0",
         "https://docs.google.com/spreadsheets/d/1r_fm6VH40ZdAlwPT5t5sXQKs4H1V2sWh958cD0SOJ1Q/edit?gid=0#gid=0",
         "https://docs.google.com/spreadsheets/d/1lTyWNieetEzELxDIL5vW35Ibi0A_ff9D7cgLIs7Pu3o/edit?gid=0#gid=0"
-        #"https://docs.google.com/spreadsheets/d/1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w/export?format=csv",
-        #"https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
     ]
+
     comp_frames = []
     for url in comp_urls:
         df_part = pd.read_csv(url)
         df_part.columns = df_part.columns.str.strip()
+
+        # Remove rows where all columns except Name are blank
+        if "Name" in df_part.columns:
+            non_name_cols = [c for c in df_part.columns if c != "Name"]
+            df_part = df_part.dropna(subset=non_name_cols, how="all")
+
+        # If no usable rows remain, skip this competitor
+        if df_part.empty:
+            continue
+
+        # Convert Date column (blank dates become NaT, which is allowed)
         df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
+
         comp_frames.append(df_part)
+
     df = pd.concat(comp_frames, ignore_index=True)
 
     # --- Deduplicate competitor rows ---
@@ -516,7 +527,6 @@ elif mode == "Maximum Points Projection (All Events)":
             return []
         f = fut_df.copy()
         f["WeekendID"] = assign_weekend_ids(f["Date"])
-        # A+ gives 12 points for 1st → assume max for projection
         return [12] * f["WeekendID"].nunique()
 
     # --- A/B helpers ---
@@ -627,3 +637,4 @@ elif mode == "Maximum Points Projection (All Events)":
         "using current + future weekends (AA=15, A+=12) and A/B best 5 using "
         "current + future weekends (A=8, B=5)."
     )
+
