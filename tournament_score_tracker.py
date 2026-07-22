@@ -398,8 +398,11 @@ elif mode == "Maximum Points Projection (All Events)":
 
     # --- Load competitor sheets ---
     comp_urls = [
-        "https://docs.google.com/spreadsheets/d/1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w/export?format=csv",
-        "https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
+        "https://docs.google.com/spreadsheets/d/13xCSyusv7TB0FYV1VOeHynsL5n7gPtCn6QKCNCxD4lc/edit?gid=0#gid=0"
+        "https://docs.google.com/spreadsheets/d/1r_fm6VH40ZdAlwPT5t5sXQKs4H1V2sWh958cD0SOJ1Q/edit?gid=0#gid=0"
+        "https://docs.google.com/spreadsheets/d/1lTyWNieetEzELxDIL5vW35Ibi0A_ff9D7cgLIs7Pu3o/edit?gid=0#gid=0"
+        #"https://docs.google.com/spreadsheets/d/1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w/export?format=csv",
+        #"https://docs.google.com/spreadsheets/d/1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg/export?format=csv"
     ]
     comp_frames = []
     for url in comp_urls:
@@ -415,7 +418,7 @@ elif mode == "Maximum Points Projection (All Events)":
         df = df.drop_duplicates(subset=dedupe_keys)
 
     # --- Load tournament metadata ---
-    tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
+    tourney_url = "https://docs.google.com/spreadsheets/d/17tvOy5tv3cjtT15h8jQGGKCaal6JRXL0GHn7J2P9B0w/export?format=csv"
     tournaments = pd.read_csv(tourney_url)
     tournaments.columns = tournaments.columns.str.strip()
     tournaments["Date"] = pd.to_datetime(tournaments["Date"], errors="coerce")
