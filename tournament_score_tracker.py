@@ -8,7 +8,8 @@ from datetime import datetime
 # GOOGLE SHEETS SETUP
 # ======================
 SHEET_ID_MAIN = "1GsxPhcrKvQ-eUOov4F8XiPONOS6fhF648Xb8-m6JiCs"
-TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
+#TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv"
+TOURNAMENT_LIST_SHEET = "https://docs.google.com/spreadsheets/d/17tvOy5tv3cjtT15h8jQGGKCaal6JRXL0GHn7J2P9B0w/export?format=csv"
 
 # Load credentials
 creds_json = st.secrets["google_service_account"]
