@@ -403,23 +403,23 @@ elif mode == "Maximum Points Projection (All Events)":
     ]
 
     comp_frames = []
-        for url in comp_urls:
-            df_part = pd.read_csv(url)
-            df_part.columns = df_part.columns.str.strip()
+    for url in comp_urls:
+        df_part = pd.read_csv(url)
+        df_part.columns = df_part.columns.str.strip()
 
-            # Remove rows where Name exists but all other columns are blank
-            if "Name" in df_part.columns:
-                non_name_cols = [c for c in df_part.columns if c != "Name"]
-                df_part = df_part[~df_part[non_name_cols].isna().all(axis=1)]
+        # Remove rows where Name exists but all other columns are blank
+        if "Name" in df_part.columns:
+            non_name_cols = [c for c in df_part.columns if c != "Name"]
+            df_part = df_part[~df_part[non_name_cols].isna().all(axis=1)]
 
-            # Skip if no usable rows remain
-                if df_part.empty:
-                continue
+        # Skip if no usable rows remain
+        if df_part.empty:
+            continue
 
-            # Convert Date column (blank dates become NaT)
-            df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
+        # Convert Date column (blank dates become NaT)
+        df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
 
-            comp_frames.append(df_part)
+        comp_frames.append(df_part)
 
     df = pd.concat(comp_frames, ignore_index=True)
 
