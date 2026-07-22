@@ -306,7 +306,7 @@ elif mode == "View Tournament Results":
     st.subheader("🥋 View Tournament Results")
 
     # Load tournament metadata
-    tourney_url = "https://docs.google.com/spreadsheets/d/16ORyU9066rDdQCeUTjWYlIVtEYLdncs5EG89IoANOeE/export?format=csv&gid=327661053"
+    tourney_url = "https://docs.google.com/spreadsheets/d/17tvOy5tv3cjtT15h8jQGGKCaal6JRXL0GHn7J2P9B0w/export?format=csv"
     tournaments_df = pd.read_csv(tourney_url)
     tournaments_df["Date"] = pd.to_datetime(tournaments_df["Date"], errors="coerce")
     today = pd.to_datetime(datetime.today().date())
@@ -319,8 +319,9 @@ elif mode == "View Tournament Results":
 
     # Choose division
     sheet_map = {
-        "50–59 1st Degree Black Belt": "1tCWIc-Zeog8GFH6fZJJR-85GHbC1Kjhx50UvGluZqdg",
-        "40–49 2nd/3rd Degree Black Belt": "1W7q6YjLYMqY9bdv5G77KdK2zxUKET3NZMQb9Inu2F8w"
+        "50–59 1st Degree Black Belt": "1lTyWNieetEzELxDIL5vW35Ibi0A_ff9D7cgLIs7Pu3o",
+        "50-59 2nd/3rd Degree Black Belt": "13xCSyusv7TB0FYV1VOeHynsL5n7gPtCn6QKCNCxD4lc",
+        "40–49 2nd/3rd Degree Black Belt": "1r_fm6VH40ZdAlwPT5t5sXQKs4H1V2sWh958cD0SOJ1Q"
     }
     division = st.selectbox("Choose division:", list(sheet_map.keys()))
     result_url = f"https://docs.google.com/spreadsheets/d/{sheet_map[division]}/export?format=csv&gid=0"
