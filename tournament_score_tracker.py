@@ -397,9 +397,9 @@ elif mode == "Maximum Points Projection (All Events)":
 
     # --- Load competitor sheets ---
     comp_urls = [
-        "https://docs.google.com/spreadsheets/d/13xCSyusv7TB0FYV1VOeHynsL5n7gPtCn6QKCNCxD4lc/edit?gid=0#gid=0",
-        "https://docs.google.com/spreadsheets/d/1r_fm6VH40ZdAlwPT5t5sXQKs4H1V2sWh958cD0SOJ1Q/edit?gid=0#gid=0",
-        "https://docs.google.com/spreadsheets/d/1lTyWNieetEzELxDIL5vW35Ibi0A_ff9D7cgLIs7Pu3o/edit?gid=0#gid=0"
+        "https://docs.google.com/spreadsheets/d/13xCSyusv7TB0FYV1VOeHynsL5n7gPtCn6QKCNCxD4lc/export?format=csv&gid=0",
+        "https://docs.google.com/spreadsheets/d/1r_fm6VH40ZdAlwPT5t5sXQKs4H1V2sWh958cD0SOJ1Q/export?format=csv&gid=0",
+        "https://docs.google.com/spreadsheets/d/1lTyWNieetEzELxDIL5vW35Ibi0A_ff9D7cgLIs7Pu3o/export?format=csv&gid=0"
     ]
 
     comp_frames = []
