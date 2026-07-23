@@ -407,10 +407,9 @@ elif mode == "Maximum Points Projection (All Events)":
         df_part = pd.read_csv(url)
         df_part.columns = df_part.columns.str.strip()
 
-        # Remove rows where Name exists but all other columns are blank
-        if "Name" in df_part.columns:
-            non_name_cols = [c for c in df_part.columns if c != "Name"]
-            df_part = df_part[~df_part[non_name_cols].isna().all(axis=1)]
+        # Skip rows where Date is missing
+        if "Date" in df_part.columns:
+            df_part = df_part[df_part["Date"].notna()]
 
         # Skip if no usable rows remain
         if df_part.empty:
