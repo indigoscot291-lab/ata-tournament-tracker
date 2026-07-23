@@ -407,18 +407,21 @@ elif mode == "Maximum Points Projection (All Events)":
         df_part = pd.read_csv(url)
         df_part.columns = df_part.columns.str.strip()
 
-        # Skip rows where Date is missing
-        if "Date" in df_part.columns:
-            df_part = df_part[df_part["Date"].notna()]
+        # If Date column is missing at this moment, skip the sheet
+        if "Date" not in df_part.columns:
+            continue
 
-        # Skip if no usable rows remain
+        # Skip rows where Date is missing (your requirement)
+        df_part = df_part[df_part["Date"].notna()]
+
+        # If no usable rows remain, skip this competitor
         if df_part.empty:
             continue
 
-        # Convert Date column (blank dates become NaT)
+        # Safe to convert Date now
         df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
 
-        comp_frames.append(df_part)
+    comp_frames.append(df_part)
 
     df = pd.concat(comp_frames, ignore_index=True)
 
