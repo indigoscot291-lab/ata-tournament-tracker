@@ -459,7 +459,7 @@ elif mode == "Maximum Points Projection (All Events)":
         df["TypeNorm"] = df["Type"].apply(norm_type)
 
     today = pd.to_datetime(datetime.today().date())
-    season_end = pd.to_datetime("2026-05-31")
+    season_end = pd.to_datetime("2027-05-31")
     future_tournaments = tournaments[(tournaments["Date"] > today) & (tournaments["Date"] <= season_end)].copy()
 
     # --- NEW: let user choose which future tournaments to include ---
