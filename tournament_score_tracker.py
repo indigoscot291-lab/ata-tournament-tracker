@@ -421,7 +421,7 @@ elif mode == "Maximum Points Projection (All Events)":
         # Safe to convert Date now
         df_part["Date"] = pd.to_datetime(df_part["Date"], errors="coerce")
 
-    comp_frames.append(df_part)
+        comp_frames.append(df_part)
 
     df = pd.concat(comp_frames, ignore_index=True)
 
